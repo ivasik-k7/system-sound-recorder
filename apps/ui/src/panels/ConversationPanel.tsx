@@ -74,8 +74,24 @@ function speakerHue(label: string): number {
   return hash
 }
 
-function Bubble({ line, continued }: { line: Line; continued: boolean }) {
+function Bubble({
+  line,
+  continued,
+  onRename,
+}: {
+  line: Line
+  continued: boolean
+  onRename: (index: number, name: string) => void
+}) {
   const hue = speakerHue(line.speaker.label)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const commit = () => {
+    setEditing(false)
+    onRename(line.speaker.index, draft)
+  }
+
   return (
     <div className={`chat-line${continued ? ' chat-line--continued' : ''}`}>
       {!continued && (
@@ -85,8 +101,35 @@ function Bubble({ line, continued }: { line: Line; continued: boolean }) {
             style={{ background: `hsl(${hue} 65% 58%)` }}
             aria-hidden="true"
           />
-          <span className="chat-line__speaker">{line.speaker.label}</span>
-          {line.speaker.inferred && (
+          {editing ? (
+            <input
+              className="input chat-line__rename"
+              autoFocus
+              value={draft}
+              placeholder="Who is this?"
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commit()
+                if (e.key === 'Escape') setEditing(false)
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="chat-line__speaker"
+              // Naming reaches backwards: the moment you realise who is
+              // speaking is usually several lines after they started.
+              title="Click to say who this is. Every line from this voice takes the name, including the ones already above."
+              onClick={() => {
+                setDraft(line.speaker.inferred ? '' : line.speaker.label)
+                setEditing(true)
+              }}
+            >
+              {line.speaker.label}
+            </button>
+          )}
+          {line.speaker.inferred && !editing && (
             <span className="badge" title="Grouped by how the voice sounds, which is a guess">
               inferred
             </span>
@@ -123,11 +166,25 @@ export function ConversationPanel() {
   const start = useConversation((s) => s.start)
   const stop = useConversation((s) => s.stop)
   const openSave = useConversation((s) => s.openSave)
+  const filter = useConversation((s) => s.filter)
+  const setFilter = useConversation((s) => s.setFilter)
+  const renameSpeaker = useConversation((s) => s.renameSpeaker)
   const loadEngines = useConversation((s) => s.loadEngines)
 
   const bottom = useRef<HTMLDivElement>(null)
   const live = isListening(status)
   const selected = models.find((m) => m.id === model)
+
+  // Searching a conversation is how anybody finds the thing they half
+  // remember somebody saying, which is most of what a transcript is for.
+  const needle = filter.trim().toLowerCase()
+  const shown = needle
+    ? lines.filter(
+        (l) =>
+          l.text.toLowerCase().includes(needle) ||
+          l.speaker.label.toLowerCase().includes(needle),
+      )
+    : lines
 
   useEffect(() => {
     if (!engines) void loadEngines()
@@ -245,6 +302,14 @@ export function ConversationPanel() {
           title="Try to tell voices apart within this channel. Between channels the answer is exact; within one it is a guess."
         />
 
+        <input
+          className="input"
+          style={{ maxWidth: 180 }}
+          placeholder="Search this conversation"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+
         <button
           type="button"
           className="btn btn--sm"
@@ -344,12 +409,19 @@ export function ConversationPanel() {
               ? 'Listening. Lines appear here as people speak.'
               : 'Choose a channel and press Listen, or use the transcribe button on any row in Discovery. Reading a channel is independent of recording: either, both, or neither.'}
           </div>
+        ) : shown.length === 0 ? (
+          <div className="panel__empty">Nothing here matches “{filter}”.</div>
         ) : (
-          lines.map((line, i) => (
+          shown.map((line, i) => (
             <Bubble
               key={`${line.index}-${i}`}
               line={line}
-              continued={i > 0 && lines[i - 1]?.speaker.label === line.speaker.label}
+              // Grouping follows what is on screen: with a filter applied, two
+              // lines shown together were not necessarily said together.
+              continued={
+                !needle && i > 0 && shown[i - 1]?.speaker.label === line.speaker.label
+              }
+              onRename={(index, name) => void renameSpeaker(index, name)}
             />
           ))
         )}

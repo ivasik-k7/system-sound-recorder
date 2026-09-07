@@ -65,6 +65,10 @@ interface ConversationState {
   stop: () => Promise<void>
   poll: () => Promise<void>
   clear: () => void
+  renameSpeaker: (index: number, name: string) => Promise<void>
+  /** Only show lines containing this. Empty shows everything. */
+  filter: string
+  setFilter: (text: string) => void
   openSave: () => void
   closeSave: () => void
   save: (
@@ -72,6 +76,7 @@ interface ConversationState {
     stem: string,
     formats: TranscriptFormat[],
     includeSpeakers: boolean,
+    includeNotes: boolean,
   ) => Promise<SaveResult | null>
 }
 
@@ -90,6 +95,7 @@ export const useConversation = create<ConversationState>((set, get) => ({
   busy: false,
   error: null,
   saving: false,
+  filter: '',
 
   setMode(mode) {
     set({ mode })
@@ -208,6 +214,21 @@ export const useConversation = create<ConversationState>((set, get) => ({
     set({ lines: [], status: idleStatus() })
   },
 
+  async renameSpeaker(index, name) {
+    try {
+      // The backend holds the raw labels, so a name can be applied to lines
+      // already on screen as well as to everything said afterwards.
+      const lines = await transcribeApi.nameSpeaker(index, name)
+      set({ lines, error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  setFilter(text) {
+    set({ filter: text })
+  },
+
   openSave() {
     set({ saving: true })
   },
@@ -216,7 +237,7 @@ export const useConversation = create<ConversationState>((set, get) => ({
     set({ saving: false })
   },
 
-  async save(directory, stem, formats, includeSpeakers) {
+  async save(directory, stem, formats, includeSpeakers, includeNotes) {
     const { lines, status } = get()
     const request: SaveRequest = {
       lines,
@@ -226,6 +247,10 @@ export const useConversation = create<ConversationState>((set, get) => ({
       stem,
       formats,
       includeSpeakers,
+      includeNotes,
+      startedUtc: new Date(Date.now() - status.elapsedSecs * 1000)
+        .toISOString()
+        .replace(/\.\d+Z$/, 'Z'),
     }
     try {
       const result = await transcribeApi.save(request)

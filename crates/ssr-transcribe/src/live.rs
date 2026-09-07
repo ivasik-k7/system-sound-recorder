@@ -510,7 +510,19 @@ impl LineWriter {
             .with_context(|| format!("opening {}", path.display()))?;
 
         if options.transcript_format == LiveFormat::Markdown {
+            // The header carries a note about other people's voices. It belongs
+            // in the file rather than only in the interface, because the file
+            // is what gets forwarded, and the person who receives it was not
+            // there when anything was shown on screen.
             let _ = writeln!(file, "# {}\n", options.channel);
+            let _ = writeln!(
+                file,
+                "_Transcribed from {} on {}. Recognition ran on this machine. \
+                 This may contain other people's voices; check the policy that \
+                 applies before sharing it._\n",
+                options.channel,
+                crate::transcript::today()
+            );
         }
         Ok(LineWriter {
             file: Some(file),

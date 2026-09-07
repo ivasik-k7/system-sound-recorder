@@ -164,6 +164,13 @@ fn friendly_time(seconds: f64) -> String {
     }
 }
 
+/// Today's date, for the note at the head of a transcript.
+pub fn today() -> String {
+    // Seconds are noise in a header; the day is what someone checks against.
+    let stamp = ssr_timeline::manifest::now_rfc3339();
+    stamp.split('T').next().unwrap_or(&stamp).to_string()
+}
+
 /// Render a transcript in one format.
 pub fn render(transcript: &Transcript, format: TranscriptFormat) -> Result<String> {
     let mut out = String::new();

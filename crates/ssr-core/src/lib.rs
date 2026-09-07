@@ -28,6 +28,7 @@ pub mod procfind;
 pub mod sessions;
 pub mod source;
 pub mod trace;
+pub mod version;
 
 pub use catalog::{Category, CATALOG};
 pub use channels::{channels_of, layout_name, ChannelInfo};
@@ -46,6 +47,7 @@ pub use sessions::{
     SessionMonitor, SessionState,
 };
 pub use source::{start, CaptureStats, SourceHandle, SourceSpec};
+pub use version::FULL as VERSION;
 
 /// The current local date and time as `YYYY-MM-DD_HH-MM-SS`.
 ///

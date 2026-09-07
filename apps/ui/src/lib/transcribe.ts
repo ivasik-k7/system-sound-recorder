@@ -147,6 +147,10 @@ export interface SaveRequest {
   stem: string
   formats: TranscriptFormat[]
   includeSpeakers: boolean
+  /** Also write a meeting record: who spoke, what looks like an action or a
+   *  decision, and the whole transcript underneath it. */
+  includeNotes: boolean
+  startedUtc: string
 }
 
 export interface SaveResult {
@@ -204,6 +208,18 @@ export const transcribeApi = {
 
   async downloadStatus(): Promise<ModelDownload> {
     return isDesktop() ? invoke<ModelDownload>('model_download_status') : sim.downloadStatus()
+  },
+
+  /** Name one of the voices, backwards through the conversation and forwards. */
+  async nameSpeaker(index: number, name: string): Promise<Line[]> {
+    return isDesktop() ? invoke<Line[]>('name_speaker', { index, name }) : sim.name(index, name)
+  },
+
+  /** The voices heard so far: number, automatic label, and any name given. */
+  async voices(): Promise<[number, string, string][]> {
+    return isDesktop()
+      ? invoke<[number, string, string][]>('conversation_voices')
+      : sim.voices()
   },
 
   async sessionTracks(path: string): Promise<string[]> {
@@ -350,11 +366,26 @@ const sim = (() => {
       running = false
       return { ...s, active: false }
     },
-    async save(request: SaveRequest): Promise<SaveResult> {
-      return {
-        directory: request.directory,
-        files: request.formats.map((f) => `${request.directory}\\${request.stem}.${f}`),
+    async name(index: number, name: string): Promise<Line[]> {
+      for (const line of lines) {
+        if (line.speaker.index === index) {
+          line.speaker.label = name.trim() || `${channel}, speaker ${index}`
+          line.speaker.inferred = name.trim() === ''
+        }
       }
+      return [...lines]
+    },
+    async voices(): Promise<[number, string, string][]> {
+      const seen = new Map<number, string>()
+      for (const line of lines) {
+        if (!seen.has(line.speaker.index)) seen.set(line.speaker.index, line.speaker.label)
+      }
+      return [...seen].map(([i, label]) => [i, label, ''] as [number, string, string])
+    },
+    async save(request: SaveRequest): Promise<SaveResult> {
+      const files = request.formats.map((f) => `${request.directory}\\${request.stem}.${f}`)
+      if (request.includeNotes) files.unshift(`${request.directory}\\${request.stem} - notes.md`)
+      return { directory: request.directory, files }
     },
   }
 })()

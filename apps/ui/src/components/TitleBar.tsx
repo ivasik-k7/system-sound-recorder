@@ -17,6 +17,7 @@ import {
   IconRestore,
 } from './Icons'
 import { isRecording, useStore } from '../state/store'
+import { VERSION } from '../lib/version'
 import { plural } from '../lib/format'
 
 interface Props {
@@ -69,8 +70,8 @@ export function TitleBar({ api, onShowShortcuts, extra }: Props) {
       <div className="titlebar__brand" data-tauri-drag-region>
         <AppMark className="titlebar__mark" />
         <span className="titlebar__title">System Sound Recorder</span>
-        <span className="titlebar__version" title={`Version ${__APP_VERSION__} (${__BUILD_REF__})`}>
-          {__APP_VERSION__}
+        <span className="titlebar__version" title={`Version ${VERSION}`}>
+          {VERSION}
         </span>
       </div>
 

@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import { api } from '../lib/api'
+import { BUILD_REF, VERSION, VERSION_NUMBER } from '../lib/version'
 import { Modal, Popover, Segmented, Switch } from './primitives'
 import {
   AppMark,
@@ -329,9 +330,8 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
         <AppMark size={34} />
         <div style={{ minWidth: 0 }}>
           <div className="about__name">System Sound Recorder</div>
-          <div className="rowline" style={{ gap: 6 }}>
-            <span className="badge badge--accent badge--mono">{__APP_VERSION__}</span>
-            <span className="badge badge--quiet badge--mono">{__BUILD_REF__}</span>
+          <div className="rowline" style={{ gap: 8 }}>
+            <span className="badge badge--accent badge--mono">{VERSION}</span>
             <span className="badge badge--warn">pre-release</span>
           </div>
         </div>
@@ -345,10 +345,10 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
 
       <div className="about__facts">
         <Fact label="Version">
-          <span className="mono">{__APP_VERSION__}</span>
+          <span className="mono">{VERSION_NUMBER}</span>
         </Fact>
-        <Fact label="Build">
-          <span className="mono">{__BUILD_REF__}</span>
+        <Fact label="Built from">
+          <span className="mono">{BUILD_REF}</span>
         </Fact>
         <Fact label="Licence">MIT</Fact>
         <Fact label="Capture">WASAPI loopback and process loopback</Fact>
@@ -392,7 +392,7 @@ export function AboutMenu() {
         type="button"
         className={`btn btn--ghost btn--sm btn--icon${open ? ' btn--accent-quiet' : ''}`}
         onClick={() => setOpen(true)}
-        title={`About System Sound Recorder ${__APP_VERSION__}`}
+        title={`About System Sound Recorder ${VERSION}`}
         aria-label="About"
       >
         <IconInfo size={14} />

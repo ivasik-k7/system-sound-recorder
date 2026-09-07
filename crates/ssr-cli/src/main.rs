@@ -11,7 +11,9 @@ use clap::{Args, Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "ssr",
-    version,
+    // The tag and the commit, not the tag alone: between two tags there are
+    // many builds, and a bug report needs to name one of them.
+    version = ssr_core::version::FULL,
     about = "Record system audio: everything mixed, or one track per application.",
     long_about = "Record system audio on Windows.\n\n\
 Audio from Citrix sessions, WSL, browsers and native applications all converge \

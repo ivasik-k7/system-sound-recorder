@@ -431,3 +431,28 @@
     transition: none;
   }
 }
+
+/* Speaker names are buttons: clicking one says who it is, and the name reaches
+   backwards through everything that voice already said. */
+.chat-line__speaker {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: default;
+  border-bottom: 1px dashed transparent;
+}
+
+.chat-line__speaker:hover {
+  border-bottom-color: var(--text-3, #8b95a3);
+}
+
+.chat-line__rename {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  max-width: 180px;
+}

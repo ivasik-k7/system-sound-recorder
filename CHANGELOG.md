@@ -11,8 +11,17 @@ says nothing.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.1] - 2026-09-07
+
 ### Added
 
+- The version now names the build it came from. The command line, the About
+  box and every session manifest report `v0.2.1-<commit>`; the package
+  manifests keep the bare `0.2.1`, which is all Cargo, npm and an MSI product
+  version will accept. Between two tags there are many builds, and a bug report
+  or a recording from six months ago needs to name one of them.
 - Continuous integration: formatting, clippy at `-D warnings`, the tests on
   Windows, the interface typecheck and build, a cross-compile from Linux
   matching the documented WSL workflow, the declared minimum Rust versions, and

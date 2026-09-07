@@ -50,7 +50,7 @@ Download from the [latest release](https://github.com/ivasik-k7/system-sound-rec
 Verify a download against `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash .\System-Sound-Recorder-0.1.0-setup.exe -Algorithm SHA256
+Get-FileHash .\System-Sound-Recorder-0.2.1-setup.exe -Algorithm SHA256
 ```
 
 Releases are built by [GitHub Actions](.github/workflows/release.yml) from a

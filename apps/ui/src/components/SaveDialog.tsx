@@ -41,6 +41,7 @@ export function SaveDialog() {
   const [stem, setStem] = useState('')
   const [formats, setFormats] = useState<TranscriptFormat[]>(['md', 'txt'])
   const [includeSpeakers, setIncludeSpeakers] = useState(true)
+  const [includeNotes, setIncludeNotes] = useState(true)
   const [result, setResult] = useState<string[] | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -89,11 +90,21 @@ export function SaveDialog() {
       current.includes(id) ? current.filter((f) => f !== id) : [...current, id],
     )
 
-  const canSave = formats.length > 0 && stem.trim() !== '' && directory.trim() !== '' && !busy
+  const canSave =
+    (formats.length > 0 || includeNotes) &&
+    stem.trim() !== '' &&
+    directory.trim() !== '' &&
+    !busy
 
   const onSave = async () => {
     setBusy(true)
-    const written = await save(directory.trim(), stem.trim(), formats, includeSpeakers)
+    const written = await save(
+      directory.trim(),
+      stem.trim(),
+      formats,
+      includeSpeakers,
+      includeNotes,
+    )
     setBusy(false)
     if (written) setResult(written.files)
   }
@@ -194,6 +205,13 @@ export function SaveDialog() {
               onChange={setIncludeSpeakers}
               label="Put the speaker in front of each line"
             />
+
+            <Switch
+              checked={includeNotes}
+              onChange={setIncludeNotes}
+              label="Also write a meeting record"
+              title="Who spoke, the lines that look like actions or decisions, and the whole transcript underneath. The picking out is done by matching turns of phrase, so it is shown as suggestions with the phrase that matched."
+            />
           </div>
         )}
 
@@ -213,7 +231,12 @@ export function SaveDialog() {
                 disabled={!canSave}
                 onClick={() => void onSave()}
               >
-                <IconSave /> {busy ? 'Writing…' : `Write ${formats.length} file${formats.length === 1 ? '' : 's'}`}
+                <IconSave />{' '}
+                {busy
+                  ? 'Writing…'
+                  : `Write ${formats.length + (includeNotes ? 1 : 0)} file${
+                      formats.length + (includeNotes ? 1 : 0) === 1 ? '' : 's'
+                    }`}
               </button>
             </>
           )}

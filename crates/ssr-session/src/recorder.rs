@@ -511,7 +511,9 @@ fn run_session(
 
     let mut manifest = SessionManifest {
         tool: "system-sound-recorder".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
+        // The build that made the recording, so a session can be traced back
+        // to one even after several releases have gone by.
+        version: ssr_core::version::FULL.to_string(),
         started_utc,
         ended_utc: now_rfc3339(),
         duration_secs: longest,

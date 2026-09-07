@@ -155,6 +155,15 @@ const LINES_KEPT: usize = 2_000;
 /// Shared between the listening thread and whoever is watching it.
 struct Shared {
     lines: Vec<Line>,
+    /// Names the user has given the voices, by speaker number.
+    ///
+    /// Kept apart from the lines themselves and applied when they are read. The
+    /// grouping of voices is a fact about the audio and does not change; who
+    /// those voices belong to is something only the user knows, and they
+    /// usually work it out several lines after the person started talking. So
+    /// naming has to reach backwards through the conversation, which it can
+    /// only do if the raw labels are still there underneath.
+    names: std::collections::HashMap<usize, String>,
     /// Lines dropped from the front, so indexing stays correct after trimming.
     dropped: usize,
     status: ListenStatus,
@@ -174,6 +183,25 @@ impl Shared {
     /// Total produced, including those no longer held.
     fn total(&self) -> usize {
         self.dropped + self.lines.len()
+    }
+
+    /// A line as the user should see it, with any name they have given applied.
+    fn named(&self, line: &Line) -> Line {
+        match self.names.get(&line.speaker.index) {
+            Some(name) => {
+                let mut copy = line.clone();
+                copy.speaker.label = name.clone();
+                // A name the user typed is not a guess any more.
+                copy.speaker.inferred = false;
+                copy
+            }
+            None => line.clone(),
+        }
+    }
+
+    /// Every line, named, for saving.
+    fn all_named(&self) -> Vec<Line> {
+        self.lines.iter().map(|l| self.named(l)).collect()
     }
 }
 
@@ -227,6 +255,7 @@ impl LiveSession {
 
         let shared = Arc::new(Mutex::new(Shared {
             lines: Vec::new(),
+            names: std::collections::HashMap::new(),
             dropped: 0,
             status: ListenStatus {
                 active: true,
@@ -337,13 +366,59 @@ impl LiveSession {
                 // oldest lines may have been forgotten. Anything the caller
                 // missed entirely is gone; the file still has it.
                 let skip = after.saturating_sub(s.dropped);
-                s.lines.iter().skip(skip).cloned().collect()
+                s.lines.iter().skip(skip).map(|l| s.named(l)).collect()
             })
             .unwrap_or_default()
     }
 
     pub fn is_running(&self) -> bool {
         self.status().active
+    }
+
+    /// Give a voice a name, backwards through the conversation and forwards.
+    ///
+    /// An empty name puts the automatic label back.
+    pub fn name_speaker(&self, index: usize, name: &str) -> Vec<Line> {
+        if let Ok(mut s) = self.shared.lock() {
+            let trimmed = name.trim();
+            if trimmed.is_empty() {
+                s.names.remove(&index);
+            } else {
+                s.names.insert(index, trimmed.to_string());
+            }
+            return s.lines.iter().map(|l| s.named(l)).collect();
+        }
+        Vec::new()
+    }
+
+    /// The voices heard so far, with any names already given.
+    pub fn voices(&self) -> Vec<(usize, String, String)> {
+        self.shared
+            .lock()
+            .map(|s| {
+                let mut seen: Vec<(usize, String, String)> = Vec::new();
+                for line in &s.lines {
+                    let index = line.speaker.index;
+                    if seen.iter().any(|(i, _, _)| *i == index) {
+                        continue;
+                    }
+                    seen.push((
+                        index,
+                        line.speaker.label.clone(),
+                        s.names.get(&index).cloned().unwrap_or_default(),
+                    ));
+                }
+                seen
+            })
+            .unwrap_or_default()
+    }
+
+    /// Every line, with names applied, for saving.
+    pub fn all_lines(&self) -> Vec<Line> {
+        self.shared
+            .lock()
+            .map(|s| s.all_named())
+            .unwrap_or_default()
     }
 
     pub fn stop(&mut self) -> ListenStatus {
@@ -514,6 +589,13 @@ pub struct SaveRequest {
     /// Prefix each line with who said it.
     #[serde(default = "yes")]
     pub include_speakers: bool,
+    /// Also write a meeting record: who spoke, the lines that look like
+    /// actions or decisions, and then the whole transcript underneath.
+    #[serde(default)]
+    pub include_notes: bool,
+    /// When the recording started, for the header of that record.
+    #[serde(default)]
+    pub started_utc: String,
 }
 
 /// Where a save ended up.
@@ -529,8 +611,8 @@ pub fn save_conversation(request: SaveRequest) -> Result<SaveResult> {
     if request.lines.is_empty() {
         bail!("there is nothing to save yet");
     }
-    if request.formats.is_empty() {
-        bail!("choose at least one format");
+    if request.formats.is_empty() && !request.include_notes {
+        bail!("choose at least one thing to write");
     }
 
     let mut transcript =
@@ -545,6 +627,22 @@ pub fn save_conversation(request: SaveRequest) -> Result<SaveResult> {
 
     let stem = ssr_timeline::sanitize_filename(&request.stem);
     let mut files = Vec::new();
+
+    if request.include_notes {
+        let started = if request.started_utc.is_empty() {
+            ssr_timeline::manifest::now_rfc3339()
+        } else {
+            request.started_utc.clone()
+        };
+        let body =
+            ssr_transcribe::notes::meeting_notes(&request.lines, &request.channel, &started);
+        std::fs::create_dir_all(&request.directory)?;
+        let path = request.directory.join(format!("{stem} - notes.md"));
+        std::fs::write(&path, body)
+            .with_context(|| format!("writing {}", path.display()))?;
+        files.push(path.display().to_string());
+    }
+
     for format in &request.formats {
         let path =
             ssr_transcribe::transcript::write(&transcript, &request.directory, &stem, *format)?;
@@ -585,31 +683,35 @@ const CATALOGUE: &[(&str, &str, &str, u64)] = &[
     (
         "tiny",
         "Tiny",
-        "Fastest, roughest. Usable for English only.",
+        "Fastest and roughest. English only, and only when it is clear.",
         75_000_000,
     ),
     (
         "base",
         "Base",
-        "Fine for clear English. Weak on other languages.",
+        "Fine for clear English. Around twenty times quicker than real time \
+         with faster-whisper, so it never falls behind.",
         145_000_000,
     ),
     (
         "small",
         "Small",
-        "The first size worth using for Ukrainian and other languages.",
+        "The first size worth using for Ukrainian and other languages. Around \
+         six times quicker than real time, so it still keeps up live.",
         480_000_000,
     ),
     (
         "medium",
         "Medium",
-        "Better again, and noticeably slower on a processor.",
+        "Better again, but slower than the conversation on a processor. Use it \
+         on a finished recording rather than a live one.",
         1_500_000_000,
     ),
     (
         "large-v3",
         "Large",
-        "Best available. Slow without a graphics card.",
+        "Best available, and far slower than real time without a graphics \
+         card. For finished recordings only.",
         3_100_000_000,
     ),
 ];
