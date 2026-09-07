@@ -51,6 +51,9 @@ struct AppState {
     /// At most one batch transcription, so a queue of them cannot saturate a
     /// machine that is also recording.
     batch: Mutex<Option<transcribe::BatchJob>>,
+    /// At most one model download. They are hundreds of megabytes each and
+    /// two at once would only make both slower.
+    download: Mutex<Option<transcribe::DownloadJob>>,
 }
 
 impl Default for AppState {
@@ -60,6 +63,7 @@ impl Default for AppState {
             discovery: SessionMonitor::start(IDLE_DISCOVERY_MS),
             live: Mutex::new(None),
             batch: Mutex::new(None),
+            download: Mutex::new(None),
         }
     }
 }
@@ -222,6 +226,16 @@ fn set_always_on_top(window: tauri::Window, enabled: bool) -> CmdResult<()> {
 #[tauri::command]
 fn discover(state: State<'_, AppState>) -> Discovery {
     state.discovery.latest()
+}
+
+/// Only the levels of the sessions already reported.
+///
+/// The meters want ten of these a second; the descriptions they belong to do
+/// not change and are not worth resending with them. About a twelfth the size
+/// of a full snapshot.
+#[tauri::command]
+fn discover_levels(state: State<'_, AppState>) -> Vec<ssr_core::SessionLevel> {
+    state.discovery.latest().levels()
 }
 
 /// Ask discovery to refresh faster or slower.
@@ -411,6 +425,36 @@ fn save_conversation(request: transcribe::SaveRequest) -> CmdResult<transcribe::
     transcribe::save_conversation(request).map_err(|e| fail("could not save", e))
 }
 
+/// Start fetching a speech model, reporting progress as it goes.
+#[tauri::command]
+fn download_speech_model(
+    state: State<'_, AppState>,
+    model: String,
+    engine: Option<String>,
+) -> CmdResult<transcribe::ModelDownload> {
+    let mut slot = state
+        .download
+        .lock()
+        .map_err(|_| "download state is poisoned".to_string())?;
+    if slot.as_ref().is_some_and(|j| j.is_running()) {
+        return Err("a model is already being downloaded".to_string());
+    }
+    let job = transcribe::DownloadJob::start(model, engine)
+        .map_err(|e| fail("could not start the download", e))?;
+    let status = job.status();
+    *slot = Some(job);
+    Ok(status)
+}
+
+#[tauri::command]
+fn model_download_status(state: State<'_, AppState>) -> CmdResult<transcribe::ModelDownload> {
+    let slot = state
+        .download
+        .lock()
+        .map_err(|_| "download state is poisoned".to_string())?;
+    Ok(slot.as_ref().map(|j| j.status()).unwrap_or_default())
+}
+
 /// Track names in a recorded session, for choosing what to transcribe.
 #[tauri::command]
 fn session_tracks(path: String) -> CmdResult<Vec<String>> {
@@ -420,6 +464,11 @@ fn session_tracks(path: String) -> CmdResult<Vec<String>> {
 
 /// Build and run the application.
 pub fn run() {
+    // Before anything can spawn a child. Transcription starts a speech worker
+    // that holds a model in memory, and without this it survives a crash of
+    // this process with nothing left to stop it.
+    let _kill_children_with_me = ssr_core::KillOnExit::install();
+
     tauri::Builder::default()
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
@@ -442,6 +491,7 @@ pub fn run() {
             open_panel_window,
             set_always_on_top,
             discover,
+            discover_levels,
             set_discovery_rate,
             rescan,
             list_sessions,
@@ -456,6 +506,9 @@ pub fn run() {
             transcription_status,
             save_conversation,
             session_tracks,
+            transcribe::list_speech_models,
+            download_speech_model,
+            model_download_status,
         ])
         .on_window_event(|window, event| {
             // Closing the main window ends the session rather than leaving a
@@ -464,11 +517,34 @@ pub fn run() {
                 if window.label() != "main" {
                     return;
                 }
+                // Everything the window started, not only the recording.
+                //
+                // Each of these owns a capture thread, and the two
+                // transcription slots also own a speech worker holding a model
+                // in memory. Stopping the recorder alone used to leave those
+                // running behind a closed window, with a half-written
+                // transcript and no way to reach either.
                 if let Some(state) = window.try_state::<AppState>() {
                     if let Ok(mut slot) = state.recorder.lock() {
                         if let Some(recorder) = slot.as_mut() {
                             let _ = recorder.stop();
                         }
+                    }
+                    if let Ok(mut slot) = state.live.lock() {
+                        if let Some(session) = slot.as_mut() {
+                            session.stop();
+                        }
+                        // Dropped here rather than at process exit, so the
+                        // speech worker is killed while there is still a
+                        // runtime to do it.
+                        *slot = None;
+                    }
+                    if let Ok(mut slot) = state.batch.lock() {
+                        // A batch transcription has no cancellation protocol
+                        // yet, so this only drops the handle. The job object
+                        // installed at startup is what stops its engine
+                        // processes when this one exits.
+                        *slot = None;
                     }
                 }
             }

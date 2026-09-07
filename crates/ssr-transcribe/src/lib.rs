@@ -14,6 +14,8 @@ pub mod audio;
 pub mod engine;
 pub mod job;
 pub mod live;
+pub mod resident;
+pub mod spawn;
 pub mod speakers;
 pub mod transcript;
 pub mod vad;

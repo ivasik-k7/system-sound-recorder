@@ -58,21 +58,19 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px var(--pad) 5px;
+  gap: 8px;
+  padding: 11px var(--pad) 5px;
   background: linear-gradient(var(--bg-panel) 70%, transparent);
-  font-size: var(--fs-1);
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 .section__count {
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
   color: var(--text-3);
-  text-transform: none;
 }
 
 .section__line {
@@ -270,65 +268,53 @@
   color: var(--danger);
 }
 
-/* --- badges ------------------------------------------------------------ */
+/* --- metadata ----------------------------------------------------------- */
 
+/* Not badges. These carry a fact beside something — that a source is a remote
+   session, that an endpoint is the default, that a track clipped — and a fact
+   does not need a container drawn around it. Colour does the work, and a row
+   with three of them still reads as a row rather than as a shelf of pills. */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 19px;
-  padding: 0 8px;
   flex: none;
-  border-radius: var(--r-pill);
-  background: var(--bg-active);
-  border: 1px solid transparent;
-  color: var(--text-2);
-  font-size: var(--fs-1);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text-3);
+  font-size: var(--fs-2);
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .badge--accent {
-  background: var(--accent-soft);
-  border-color: var(--accent-line);
   color: var(--accent);
 }
 
 .badge--record {
-  background: var(--record-soft);
-  border-color: var(--record);
   color: var(--record);
 }
 
 .badge--ok {
-  background: var(--ok-soft);
-  border-color: var(--ok);
   color: var(--ok);
 }
 
 .badge--warn {
-  background: var(--warn-soft);
-  border-color: var(--warn);
   color: var(--warn);
 }
 
 .badge--danger {
-  background: var(--danger-soft);
-  border-color: var(--danger);
   color: var(--danger);
 }
 
 .badge--quiet {
-  background: transparent;
-  border-color: var(--border);
   color: var(--text-3);
 }
 
 .badge--mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
 }
 
 /* --- status dot -------------------------------------------------------- */
@@ -466,51 +452,20 @@
   gap: 4px;
 }
 
-/* A channel of a stream, named. Monospaced so a row of six lines up. */
+/* A channel of a stream, named. Monospaced so a row of six line up, and
+   separated by space rather than by a box each. */
 .chip {
   display: inline-flex;
   align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--r-xs);
+  padding: 0;
+  background: none;
+  border: 0;
   font-family: var(--font-mono);
-  font-size: var(--fs-1);
-  color: var(--text-2);
-}
-
-/* --- activity log ------------------------------------------------------ */
-
-.log {
-  font-family: var(--font-mono);
-  font-size: var(--fs-3);
-  user-select: text;
-  padding: 4px 0;
-}
-
-.log__line {
-  display: flex;
-  gap: 10px;
-  padding: 2px var(--pad);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  border-left: 2px solid transparent;
-}
-
-.log__time {
-  flex: none;
+  font-size: var(--fs-2);
   color: var(--text-3);
+  white-space: nowrap;
 }
 
-.log__line--warn {
-  color: var(--warn);
-  border-left-color: var(--warn);
-  background: var(--warn-soft);
-}
-
-.log__line--error {
-  color: var(--danger);
-  border-left-color: var(--danger);
-  background: var(--danger-soft);
+.chip-list {
+  gap: 10px;
 }

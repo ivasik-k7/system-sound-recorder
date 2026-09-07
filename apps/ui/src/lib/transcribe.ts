@@ -25,7 +25,56 @@ export interface SpeechEngine {
   label: string
   executable: string
   models: string[]
+  /**
+   * The interpreter that can hold this engine open, when one was found.
+   *
+   * Its absence is the difference between the model being loaded once and
+   * being loaded again for every utterance, which costs five to fifteen
+   * seconds each time.
+   */
+  interpreter?: string | null
 }
+
+/** A model, and whether it is already on the machine. */
+export interface ModelInfo {
+  id: string
+  label: string
+  hint: string
+  /** Roughly what fetching it will cost. */
+  approximateBytes: number
+  /** True when it will load without downloading anything. */
+  cached: boolean
+  /** What it actually occupies, once it is here. */
+  bytes?: number
+}
+
+/** How a model download is going. */
+export interface ModelDownload {
+  active: boolean
+  model: string
+  fraction: number
+  bytes: number
+  total: number
+  done: boolean
+  error?: string
+}
+
+/**
+ * Languages worth putting at the top of the list.
+ *
+ * Naming the language is not only about accuracy: detection costs a pass over
+ * the audio, so saying which language it is makes every utterance faster too.
+ */
+export const LANGUAGES: { id: string; label: string }[] = [
+  { id: '', label: 'Detect automatically' },
+  { id: 'uk', label: 'Ukrainian' },
+  { id: 'en', label: 'English' },
+  { id: 'ru', label: 'Russian' },
+  { id: 'pl', label: 'Polish' },
+  { id: 'de', label: 'German' },
+  { id: 'fr', label: 'French' },
+  { id: 'es', label: 'Spanish' },
+]
 
 export interface EngineReport {
   engines: SpeechEngine[]
@@ -143,6 +192,20 @@ export const transcribeApi = {
     return isDesktop() ? invoke<SaveResult>('save_conversation', { request }) : sim.save(request)
   },
 
+  async models(): Promise<ModelInfo[]> {
+    return isDesktop() ? invoke<ModelInfo[]>('list_speech_models') : sim.models()
+  },
+
+  async downloadModel(model: string): Promise<ModelDownload> {
+    return isDesktop()
+      ? invoke<ModelDownload>('download_speech_model', { model })
+      : sim.download(model)
+  },
+
+  async downloadStatus(): Promise<ModelDownload> {
+    return isDesktop() ? invoke<ModelDownload>('model_download_status') : sim.downloadStatus()
+  },
+
   async sessionTracks(path: string): Promise<string[]> {
     return isDesktop() ? invoke<string[]>('session_tracks', { path }) : ['system', 'mic']
   },
@@ -215,7 +278,47 @@ const sim = (() => {
     }
   }
 
+  const catalogue: ModelInfo[] = [
+    { id: 'tiny', label: 'Tiny', hint: 'Fastest, roughest. English only.', approximateBytes: 75e6, cached: true, bytes: 75e6 },
+    { id: 'base', label: 'Base', hint: 'Fine for clear English.', approximateBytes: 145e6, cached: true, bytes: 145e6 },
+    { id: 'small', label: 'Small', hint: 'The first size worth using for Ukrainian.', approximateBytes: 480e6, cached: false },
+    { id: 'medium', label: 'Medium', hint: 'Better again, noticeably slower.', approximateBytes: 1.5e9, cached: false },
+    { id: 'large-v3', label: 'Large', hint: 'Best available. Slow on a processor.', approximateBytes: 3.1e9, cached: false },
+  ]
+  let downloading: ModelDownload = { active: false, model: '', fraction: 0, bytes: 0, total: 0, done: false }
+  let downloadStarted = 0
+
   return {
+    async models(): Promise<ModelInfo[]> {
+      return catalogue
+    },
+    async download(model: string): Promise<ModelDownload> {
+      downloadStarted = Date.now()
+      const entry = catalogue.find((m) => m.id === model)
+      downloading = { active: true, model, fraction: 0, bytes: 0, total: entry?.approximateBytes ?? 0, done: false }
+      return downloading
+    },
+    async downloadStatus(): Promise<ModelDownload> {
+      if (downloading.active) {
+        // Twenty seconds to finish, so the progress bar can be looked at.
+        const fraction = Math.min(1, (Date.now() - downloadStarted) / 20000)
+        downloading = {
+          ...downloading,
+          fraction,
+          bytes: Math.round(fraction * downloading.total),
+          active: fraction < 1,
+          done: fraction >= 1,
+        }
+        if (downloading.done) {
+          const entry = catalogue.find((m) => m.id === downloading.model)
+          if (entry) {
+            entry.cached = true
+            entry.bytes = entry.approximateBytes
+          }
+        }
+      }
+      return downloading
+    },
     async engines(): Promise<EngineReport> {
       return {
         ready: true,

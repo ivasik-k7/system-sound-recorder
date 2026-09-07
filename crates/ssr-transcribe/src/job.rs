@@ -318,6 +318,7 @@ mod tests {
             label: "test".into(),
             executable: PathBuf::from("does-not-exist"),
             models: Vec::new(),
+            interpreter: None,
         };
         let request = TranscribeRequest {
             session_dir: dir.clone(),

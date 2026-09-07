@@ -6,7 +6,7 @@
 
 use std::thread::JoinHandle;
 
-use crossbeam_channel::{bounded, Sender};
+use crossbeam_channel::{bounded, SendTimeoutError, Sender};
 use windows::Win32::Media::Audio::{
     AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY, AUDCLNT_BUFFERFLAGS_SILENT,
     AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR, AUDCLNT_E_DEVICE_INVALIDATED,
@@ -18,6 +18,21 @@ use crate::error::{Error, Result};
 use crate::event::{wait_either, Event, Woken};
 use crate::format::AudioFormat;
 use crate::loopback::{open_endpoint, OpenClient};
+
+/// The key a packet is routed by.
+///
+/// Shared rather than owned: a capture thread hands over a packet every few
+/// milliseconds and each one used to allocate a fresh copy of the track name
+/// purely to say where it belonged. Cloning this is an atomic increment.
+pub type TrackKey = std::sync::Arc<str>;
+
+/// How long a capture thread waits for the writer to take a packet.
+///
+/// Long enough to ride out a disk hiccup or an antivirus scan, short enough
+/// that a genuinely stuck writer does not accumulate an unbounded backlog of
+/// threads waiting on it. The buffer is already released by this point, so
+/// waiting here costs latency rather than audio.
+const HANDOVER_PATIENCE: std::time::Duration = std::time::Duration::from_millis(250);
 use crate::packet::{Packet, PacketFlags};
 use crate::process::{open_process, ProcessMode};
 use crate::procfind;
@@ -73,6 +88,11 @@ pub struct CaptureStats {
     pub frames: u64,
     /// Times WASAPI reported that samples were lost upstream of the recorder.
     pub discontinuities: u64,
+    /// Packets the writer could not take in time, and which were therefore
+    /// thrown away. Should be zero; anything else means the disk could not
+    /// keep up and the recording has holes the timeline will fill with
+    /// silence.
+    pub dropped: u64,
 }
 
 /// A running source. Dropping this stops and joins the capture thread.
@@ -140,7 +160,7 @@ pub fn start(
     name: impl Into<String>,
     spec: SourceSpec,
     buffer_ms: u32,
-    packets: Sender<(String, Packet)>,
+    packets: Sender<(TrackKey, Packet)>,
 ) -> Result<SourceHandle> {
     let name = name.into();
     let description = spec.describe();
@@ -148,7 +168,7 @@ pub fn start(
 
     let (ready_tx, ready_rx) = bounded::<Result<Ready>>(1);
     let thread_stop = stop.clone();
-    let thread_name = name.clone();
+    let thread_key: TrackKey = TrackKey::from(name.as_str());
     let thread_spec = spec.clone();
 
     let join = std::thread::Builder::new()
@@ -163,19 +183,19 @@ pub fn start(
                 }
             };
 
-            crate::trace!("opening source {thread_name:?}: {thread_spec:?}");
+            crate::trace!("opening source {thread_key:?}: {thread_spec:?}");
             let opened = open_for_spec(&thread_spec, buffer_ms, &audio_event);
             let (open, pid) = match opened {
                 Ok(v) => v,
                 Err(e) => {
                     let _ = ready_tx.send(Err(e));
                     return Err(Error::CaptureFailed(format!(
-                        "{thread_name}: stream never opened"
+                        "{thread_key}: stream never opened"
                     )));
                 }
             };
 
-            crate::trace!("source {thread_name:?} opened as {}", open.format);
+            crate::trace!("source {thread_key:?} opened as {}", open.format);
             if let Err(e) = unsafe { open.client.Start() } {
                 let _ = ready_tx.send(Err(Error::Windows(e.clone())));
                 return Err(Error::Windows(e));
@@ -186,8 +206,8 @@ pub fn start(
                 pid,
             }));
 
-            crate::trace!("source {thread_name:?} started");
-            let result = run_capture(&thread_name, &open, &thread_stop, &audio_event, &packets);
+            crate::trace!("source {thread_key:?} started");
+            let result = run_capture(&thread_key, &open, &thread_stop, &audio_event, &packets);
             unsafe {
                 let _ = open.client.Stop();
             }
@@ -247,11 +267,11 @@ fn open_for_spec(
 /// idle endpoint never raises its event at all, and the loop still has to notice
 /// a stop request in that state.
 fn run_capture(
-    name: &str,
+    key: &TrackKey,
     open: &OpenClient,
     stop: &Event,
     audio: &Event,
-    packets: &Sender<(String, Packet)>,
+    packets: &Sender<(TrackKey, Packet)>,
 ) -> Result<CaptureStats> {
     let mut stats = CaptureStats::default();
     let block_align = open.format.block_align();
@@ -262,7 +282,7 @@ fn run_capture(
             Woken::First => break,
             Woken::Second | Woken::Timeout => {}
             Woken::Failed => {
-                return Err(Error::CaptureFailed(format!("{name}: wait failed")));
+                return Err(Error::CaptureFailed(format!("{key}: wait failed")));
             }
         }
 
@@ -271,7 +291,7 @@ fn run_capture(
                 Ok(n) => n,
                 Err(e) if e.code() == AUDCLNT_E_DEVICE_INVALIDATED => {
                     return Err(Error::CaptureFailed(format!(
-                        "{name}: the audio endpoint went away mid-recording"
+                        "{key}: the audio endpoint went away mid-recording"
                     )));
                 }
                 Err(e) => return Err(Error::Windows(e)),
@@ -280,6 +300,7 @@ fn run_capture(
                 break;
             }
 
+            let mut pending: Option<Packet> = None;
             let mut data: *mut u8 = std::ptr::null_mut();
             let mut frames: u32 = 0;
             let mut raw_flags: u32 = 0;
@@ -321,21 +342,38 @@ fn run_capture(
                 stats.packets += 1;
                 stats.frames += frames as u64;
 
-                let packet = Packet {
+                pending = Some(Packet {
                     qpc_100ns: qpc_position as i64,
                     device_position,
                     samples,
                     channels,
                     flags,
-                };
-                // A closed receiver means the session is shutting down.
-                if packets.send((name.to_string(), packet)).is_err() {
-                    unsafe { open.capture.ReleaseBuffer(frames)? };
-                    return Ok(stats);
-                }
+                });
             }
 
+            // Released before the handover, always.
+            //
+            // The samples have already been copied out, so nothing needs the
+            // buffer any more — and holding it across a send means that a
+            // writer stalling on a slow disk stalls the audio engine too. The
+            // engine's response to that is to overrun its own ring and lose
+            // audio, which is precisely the failure this recorder exists to
+            // avoid. Release first and a slow writer costs at most a dropped
+            // packet, which is counted.
             unsafe { open.capture.ReleaseBuffer(frames)? };
+
+            if let Some(packet) = pending.take() {
+                match packets.send_timeout((TrackKey::clone(key), packet), HANDOVER_PATIENCE) {
+                    Ok(()) => {}
+                    // A brief stall is worth waiting out; a long one is not,
+                    // because the audio still arriving has nowhere to go
+                    // either and blocking here only moves the loss upstream
+                    // where it cannot be counted.
+                    Err(SendTimeoutError::Timeout(_)) => stats.dropped += 1,
+                    // A closed receiver means the session is shutting down.
+                    Err(SendTimeoutError::Disconnected(_)) => return Ok(stats),
+                }
+            }
         }
     }
 

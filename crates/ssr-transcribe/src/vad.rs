@@ -54,9 +54,20 @@ impl Config {
             sample_rate,
             threshold_over_floor: 3.0,
             absolute_floor: 0.004,
-            onset_frames: 3,     // 60 ms
-            hangover_frames: 35, // 700 ms
-            max_utterance_secs: 20.0,
+            onset_frames: 3, // 60 ms
+            // How long a pause has to last before an utterance is considered
+            // finished. Every millisecond here is added to how long the speaker
+            // waits to see their words. Long enough not to cut a breath in the
+            // middle of a sentence, and no longer.
+            hangover_frames: 22, // 440 ms
+            // Short on purpose. This is the ceiling on how late a line can be:
+            // nothing is recognised until the utterance closes, so twenty
+            // seconds of uninterrupted speech meant twenty seconds of silence
+            // from the transcript followed by a paragraph. Seven keeps a
+            // monologue arriving in readable pieces while it is still being
+            // spoken, and the recogniser splits each piece further by its own
+            // sentence boundaries.
+            max_utterance_secs: 7.0,
             min_utterance_secs: 0.35,
             padding_ms: 200,
         }

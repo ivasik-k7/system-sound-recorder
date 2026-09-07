@@ -270,6 +270,14 @@ export const IconSave = stroked(
   </>,
 )
 
+export const IconDownload = stroked(
+  <>
+    <path d="M8 2.6v7.2" />
+    <path d="M5.1 7.1 8 9.9l2.9-2.8" />
+    <path d="M3 11.4v1.1a.9.9 0 0 0 .9.9h8.2a.9.9 0 0 0 .9-.9v-1.1" />
+  </>,
+)
+
 export const IconFlag = stroked(
   <>
     <path d="M4 2.6v10.8" />

@@ -20,6 +20,7 @@ pub mod disk;
 pub mod error;
 pub mod event;
 pub mod format;
+pub mod jobs;
 pub mod loopback;
 pub mod packet;
 pub mod process;
@@ -36,12 +37,13 @@ pub use device::{
 pub use disk::{space_for, DiskSpace};
 pub use error::{Error, Result};
 pub use format::AudioFormat;
+pub use jobs::KillOnExit;
 pub use packet::{Packet, PacketFlags};
 pub use process::ProcessMode;
 pub use procfind::{known_targets, list_processes, resolve_pid, ProcessInfo};
 pub use sessions::{
-    discover_once, AudioSessionInfo, DiscoveredSource, Discoverer, Discovery, SessionMonitor,
-    SessionState,
+    discover_once, AudioSessionInfo, DiscoveredSource, Discoverer, Discovery, SessionLevel,
+    SessionMonitor, SessionState,
 };
 pub use source::{start, CaptureStats, SourceHandle, SourceSpec};
 

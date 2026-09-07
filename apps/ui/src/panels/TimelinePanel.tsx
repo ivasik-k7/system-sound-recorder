@@ -12,7 +12,7 @@ import { Empty, Segmented } from '../components/primitives'
 import { IconPulse } from '../components/Icons'
 import { decibels, duration } from '../lib/format'
 import { meterFraction } from '../lib/meters'
-import { HISTORY_LENGTH, useStore } from '../state/store'
+import { HISTORY_LENGTH, historyAt, useStore, type History } from '../state/store'
 import type { Marker } from '../lib/types'
 
 type Window = '30' | '90' | '300'
@@ -24,8 +24,9 @@ const WINDOW_OPTIONS = [
 ]
 
 interface PlotProps {
-  peak: number[]
-  rms: number[]
+  history: History | undefined
+  /** How many of the most recent samples to draw. */
+  samples: number
   /** Seconds the plot spans, ending at `elapsed`. */
   windowSecs: number
   /** Samples per second in the history arrays. */
@@ -37,8 +38,8 @@ interface PlotProps {
 }
 
 function TrackPlot({
-  peak,
-  rms,
+  history,
+  samples,
   windowSecs,
   sampleRate,
   elapsed,
@@ -49,6 +50,12 @@ function TrackPlot({
   const ref = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
+    // One frame, not one per poll. The effect can fire far more often than the
+    // display refreshes — five tracks at ten polls a second is fifty redraws,
+    // each walking up to nine hundred points twice — and everything but the
+    // last of those is thrown away by the compositor anyway.
+    let frame = 0
+    const draw = () => {
     const canvas = ref.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
@@ -93,24 +100,27 @@ function TrackPlot({
     }
     ctx.setLineDash([])
 
-    if (rms.length === 0) return
+    const available = Math.min(history?.count ?? 0, samples)
+    if (!history || available === 0) return
 
     // The window is a fixed span of time, so a new session scrolls in from
     // the right rather than stretching a handful of samples across the width.
     const total = windowSecs * sampleRate
     const step = width / total
+    // Index 0 is the oldest sample being drawn, `available - 1` the newest.
     const xFor = (index: number, length: number) => width - (length - 1 - index) * step
+    const sampleAt = (index: number) => historyAt(history, available - 1 - index)
 
     ctx.globalAlpha = live ? 1 : 0.5
 
     // The average, as an area. Read left to right so the path is monotonic and
     // the fill cannot self-intersect.
     ctx.beginPath()
-    ctx.moveTo(xFor(0, rms.length), height)
-    for (let i = 0; i < rms.length; i += 1) {
-      ctx.lineTo(xFor(i, rms.length), y(rms[i] ?? -120))
+    ctx.moveTo(xFor(0, available), height)
+    for (let i = 0; i < available; i += 1) {
+      ctx.lineTo(xFor(i, available), y(sampleAt(i).rms))
     }
-    ctx.lineTo(xFor(rms.length - 1, rms.length), height)
+    ctx.lineTo(xFor(available - 1, available), height)
     ctx.closePath()
     const fill = ctx.createLinearGradient(0, 0, 0, height)
     fill.addColorStop(0, high)
@@ -124,9 +134,9 @@ function TrackPlot({
     // is visible, which is the whole point of showing both.
     ctx.globalAlpha = live ? 0.95 : 0.5
     ctx.beginPath()
-    for (let i = 0; i < peak.length; i += 1) {
-      const px = xFor(i, peak.length)
-      const py = y(peak[i] ?? -120)
+    for (let i = 0; i < available; i += 1) {
+      const px = xFor(i, available)
+      const py = y(sampleAt(i).peak)
       if (i === 0) ctx.moveTo(px, py)
       else ctx.lineTo(px, py)
     }
@@ -138,15 +148,15 @@ function TrackPlot({
     // single frame of it is one pixel wide and would otherwise be invisible.
     ctx.globalAlpha = 1
     ctx.fillStyle = clip
-    for (let i = 0; i < peak.length; i += 1) {
-      if ((peak[i] ?? -120) < -0.1) continue
-      ctx.fillRect(xFor(i, peak.length) - 1, 0, 2, height)
+    for (let i = 0; i < available; i += 1) {
+      if (sampleAt(i).peak < -0.1) continue
+      ctx.fillRect(xFor(i, available) - 1, 0, 2, height)
     }
 
     // Where the history does not yet fill the window, say so rather than
     // leaving an empty stretch that looks like silence.
-    if (rms.length < total) {
-      const edge = xFor(0, rms.length)
+    if (available < total) {
+      const edge = xFor(0, available)
       ctx.globalAlpha = 0.5
       ctx.strokeStyle = faint
       ctx.setLineDash([2, 4])
@@ -157,7 +167,11 @@ function TrackPlot({
       ctx.setLineDash([])
     }
     ctx.globalAlpha = 1
-  }, [peak, rms, windowSecs, sampleRate, floor, live, tall, elapsed])
+    }
+
+    frame = requestAnimationFrame(draw)
+    return () => cancelAnimationFrame(frame)
+  }, [history, samples, windowSecs, sampleRate, floor, live, tall, elapsed])
 
   return <canvas ref={ref} className={`timeline__canvas${tall ? ' timeline__canvas--tall' : ''}`} />
 }
@@ -226,10 +240,8 @@ export function TimelinePanel() {
       <div className="panel__body">
         <div className="timeline">
           {tracks.map((track) => {
-            const entry = history[track.name] ?? { peak: [], rms: [] }
+            const entry = history[track.name]
             const samples = Math.ceil(windowSecs * sampleRate)
-            const peak = entry.peak.slice(-samples)
-            const rms = entry.rms.slice(-samples)
             const hovering = hover?.track === track.name ? hover : null
 
             return (
@@ -248,9 +260,11 @@ export function TimelinePanel() {
                   onMouseMove={(e) => {
                     const box = e.currentTarget.getBoundingClientRect()
                     const fractionAcross = (e.clientX - box.left) / box.width
-                    const index = Math.round(fractionAcross * (peak.length - 1))
-                    const db = peak[Math.max(0, Math.min(peak.length - 1, index))]
-                    if (db === undefined) return
+                    const available = Math.min(entry?.count ?? 0, samples)
+                    if (!entry || available === 0) return
+                    const index = Math.round(fractionAcross * (available - 1))
+                    const clamped = Math.max(0, Math.min(available - 1, index))
+                    const db = historyAt(entry, available - 1 - clamped).peak
                     setHover({
                       track: track.name,
                       x: fractionAcross * box.width,
@@ -260,8 +274,8 @@ export function TimelinePanel() {
                   }}
                 >
                   <TrackPlot
-                    peak={peak}
-                    rms={rms}
+                    history={entry}
+                    samples={samples}
                     windowSecs={windowSecs}
                     sampleRate={sampleRate}
                     elapsed={elapsed}

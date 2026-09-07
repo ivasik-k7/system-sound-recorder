@@ -497,12 +497,10 @@ input[type='range'].input::-moz-range-thumb {
 }
 
 .popover__label {
-  padding: 7px 9px 4px;
-  font-size: var(--fs-1);
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  padding: 8px 9px 4px;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 .popover__separator {
@@ -718,4 +716,184 @@ input[type='range'].input::-moz-range-thumb {
 
 .toast__title {
   font-weight: 600;
+}
+
+/* --- the settings menu ------------------------------------------------- */
+
+/* Wider than a plain menu and laid out as a column of blocks, because it
+   holds real controls rather than a list of commands. */
+.popover--settings {
+  width: 340px;
+  min-width: 340px;
+  padding: 5px 10px 8px;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.settings .menuitem {
+  margin: 0 -6px;
+}
+
+/* A segmented control with four options has to fit the menu's width, so its
+   options share the space rather than sizing to their labels. */
+.settings .segmented {
+  align-self: stretch;
+}
+
+.settings .segmented__option {
+  flex: 1;
+  padding: 0 6px;
+}
+
+/* --- the about box ----------------------------------------------------- */
+
+.about__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.about__name {
+  font-size: var(--fs-6);
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.about__blurb {
+  font-size: var(--fs-3);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.about__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+}
+
+.about__fact {
+  display: flex;
+  gap: 10px;
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  min-width: 0;
+}
+
+.about__factLabel {
+  flex: none;
+  width: 74px;
+  color: var(--text-3);
+}
+
+.about__factValue {
+  min-width: 0;
+  color: var(--text-2);
+}
+
+/* The liability notice. Small, but the strongest sentence in it is bold,
+   because that is the part someone needs to have read. */
+.about__legal {
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.about__legal strong {
+  color: var(--text-2);
+}
+
+.about__inlineLink {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: default;
+}
+
+/* --- popover furniture -------------------------------------------------- */
+
+/* A popover in this interface is a small panel rather than a bare list: it has
+   a heading that says what it is, grouped blocks, and an action row at the
+   bottom. The heading sticks, because two of these scroll and a menu you have
+   scrolled into the middle of should still say what it is. */
+.popover__header {
+  position: sticky;
+  top: -5px;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: -5px -5px 9px;
+  padding: 9px 12px 8px;
+  background: var(--bg-chrome-top);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.popover__headerTitle {
+  font-size: var(--fs-4);
+  font-weight: 600;
+  flex: none;
+}
+
+.popover__headerHint {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A block of related controls, sunk slightly so the groups read as groups. */
+.popover__group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+}
+
+.popover__groupTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.popover__footer {
+  position: sticky;
+  bottom: -8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 3px -5px -8px;
+  padding: 8px 12px;
+  background: var(--bg-chrome-top);
+  border-top: 1px solid var(--border-soft);
+}
+
+/* A chevron on a control that opens a menu, so it reads as one. */
+.btn__chevron {
+  margin-left: -2px;
+  color: var(--text-3);
+  transition: transform var(--t-mid) var(--ease);
+}
+
+[aria-expanded='true'] > .btn__chevron {
+  transform: rotate(180deg);
 }

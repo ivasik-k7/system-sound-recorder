@@ -358,3 +358,76 @@
     scroll-behavior: auto;
   }
 }
+
+/* ------------------------------------------------- transcription settings --- */
+
+.chat-settings {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border, #232a33);
+  background: var(--bg-raised, #1a1f26);
+  overflow: hidden;
+}
+
+.chat-settings__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-3, #8b95a3);
+  white-space: nowrap;
+}
+
+.chat-settings__field .select {
+  min-width: 0;
+  max-width: 240px;
+}
+
+.chat-settings__engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3, #8b95a3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ------------------------------------------------------- model downloads --- */
+
+.model-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2, #c8d0da);
+  white-space: nowrap;
+}
+
+.model-progress__track {
+  width: 120px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-input, #0e1116);
+  border: 1px solid var(--border, #232a33);
+  overflow: hidden;
+}
+
+.model-progress__fill {
+  display: block;
+  height: 100%;
+  background: var(--accent, #3d7eff);
+  transition: width 300ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-progress__fill {
+    transition: none;
+  }
+}

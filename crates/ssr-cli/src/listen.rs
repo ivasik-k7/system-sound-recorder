@@ -65,7 +65,7 @@ pub fn run(args: ListenArgs) -> Result<()> {
 
     // Capture first, so the endpoint's real format is known before the
     // listener is built around it.
-    let (tx, rx) = bounded::<(String, Packet)>(512);
+    let (tx, rx) = bounded::<(ssr_core::source::TrackKey, Packet)>(512);
     let spec = request.to_spec(48_000, 2);
     let handle: SourceHandle = ssr_core::start("listen", spec, args.buffer_ms, tx)
         .context("that channel could not be opened")?;
@@ -78,10 +78,25 @@ pub fn run(args: ListenArgs) -> Result<()> {
 
     eprintln!("Listening to {channel}  [{}]", handle.description);
     eprintln!(
-        "Engine: {} · writing to {}",
+        "Engine: {}{} · writing to {}",
         engine.label,
+        if engine.is_resident_capable() {
+            " · held open, so the model loads once"
+        } else {
+            ""
+        },
         transcript_path.display()
     );
+    if !engine.is_resident_capable() {
+        // Worth saying plainly. Restarting the engine for every utterance costs
+        // five to fifteen seconds each time, which is the difference between
+        // transcription happening quietly and the machine visibly grinding.
+        eprintln!(
+            "  Note: this engine is restarted for every utterance. Installing \
+             whisper.cpp,\n  or an openai-whisper whose interpreter sits beside \
+             it, would keep it loaded."
+        );
+    }
     if args.no_speakers {
         eprintln!("Speaker detection off; every line is attributed to the channel.");
     }
@@ -108,7 +123,10 @@ pub fn run(args: ListenArgs) -> Result<()> {
     let top_up_silence = |listener: &mut Listener, elapsed: f64| {
         // Stay behind the present by more than a capture buffer, or this races
         // audio still in flight and inserts silence where speech belongs.
-        let target = elapsed - 0.5;
+        // Stay behind the present by a little more than a capture buffer. Any
+        // further back and the silence that ends an utterance arrives late,
+        // which is added directly to how long the speaker waits.
+        let target = elapsed - 0.3;
         let behind = target - listener.heard_secs();
         if behind <= 0.05 {
             return;

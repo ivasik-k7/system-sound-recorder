@@ -15,7 +15,6 @@ import {
   IconMixer,
   IconPulse,
   IconRadar,
-  IconSliders,
   IconSpeaker,
   IconWave,
   type IconProps,
@@ -30,7 +29,6 @@ import { MarkersPanel } from './MarkersPanel'
 import { MetersPanel } from './MetersPanel'
 import { MixerPanel } from './MixerPanel'
 import { SessionPanel } from './SessionPanel'
-import { SettingsPanel } from './SettingsPanel'
 import { SourcesPanel } from './SourcesPanel'
 import { TimelinePanel } from './TimelinePanel'
 
@@ -140,13 +138,6 @@ export const PANELS: PanelDefinition[] = [
     component: ManifestPanel,
     icon: IconLayers,
     description: 'The record of the session that just finished',
-  },
-  {
-    id: 'settings',
-    title: 'Preferences',
-    component: SettingsPanel,
-    icon: IconSliders,
-    description: 'Appearance, meters, discovery and the keyboard map',
   },
 ]
 

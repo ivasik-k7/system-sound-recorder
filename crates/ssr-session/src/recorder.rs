@@ -214,6 +214,29 @@ struct LiveTrack {
     sum_squares: f64,
     sample_count: u64,
     rms_db: f32,
+    /// Why this track stopped accepting audio, if it did.
+    ///
+    /// A write failure is nearly always the disk filling up, and it is not a
+    /// reason to abandon the other tracks or — far worse — to skip finalising
+    /// the files that are still good. The track is retired, the session
+    /// carries on, and the manifest says what happened.
+    failed: Option<String>,
+}
+
+impl LiveTrack {
+    fn is_writable(&self) -> bool {
+        self.failed.is_none()
+    }
+
+    /// Retire this track, returning the warning to record the first time.
+    fn fail(&mut self, what: &str, error: &dyn std::fmt::Display) -> Option<String> {
+        if self.failed.is_some() {
+            return None;
+        }
+        let message = format!("track {:?} stopped {what}: {error}", self.track.name());
+        self.failed = Some(message.clone());
+        Some(message)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -234,7 +257,11 @@ fn run_session(
     let started_utc = now_rfc3339();
     let started_at = Instant::now();
 
-    let (tx, rx) = bounded::<(String, Packet)>(2048);
+    // Roughly two seconds of slack across a typical session, which is what
+    // decides how long a stalled disk can be tolerated before a capture thread
+    // starts dropping packets rather than waiting. See HANDOVER_PATIENCE in
+    // ssr-core: the two numbers are a pair.
+    let (tx, rx) = bounded::<(ssr_core::source::TrackKey, Packet)>(2048);
     let mut handles: Vec<SourceHandle> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
@@ -311,6 +338,7 @@ fn run_session(
             sum_squares: 0.0,
             sample_count: 0,
             rms_db: -120.0,
+            failed: None,
         });
     }
 
@@ -321,6 +349,7 @@ fn run_session(
         s.warnings.extend(warnings.iter().cloned());
     }
     publish(&shared, &mut tracks, started_at);
+    let mut last_publish = Instant::now();
     let _ = ready_tx.send(Ok(()));
 
     loop {
@@ -335,8 +364,16 @@ fn run_session(
 
         match rx.recv_timeout(TICK) {
             Ok((name, packet)) => {
-                if let Some(&i) = index.get(&name) {
-                    write_packet(&mut tracks[i], packet)?;
+                if let Some(&i) = index.get(name.as_ref()) {
+                    let track = &mut tracks[i];
+                    if track.is_writable() {
+                        if let Err(e) = write_packet(track, packet) {
+                            if let Some(warning) = track.fail("writing", &e) {
+                                warnings.push(warning.clone());
+                                push_warnings(&shared, std::slice::from_ref(&warning));
+                            }
+                        }
+                    }
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
@@ -346,10 +383,30 @@ fn run_session(
         // Every track is topped up on a timer, not only when its own stream goes
         // quiet, because an idle loopback stream sends nothing at all.
         let now = ssr_core::qpc_now_100ns();
-        for t in &mut tracks {
-            t.track.fill_idle(now)?;
+        for t in tracks.iter_mut().filter(|t| t.is_writable()) {
+            if let Err(e) = t.track.fill_idle(now) {
+                if let Some(warning) = t.fail("writing", &e) {
+                    warnings.push(warning.clone());
+                    push_warnings(&shared, std::slice::from_ref(&warning));
+                }
+            }
         }
-        publish(&shared, &mut tracks, started_at);
+
+        // Nothing left that can be written to. Stopping now runs the same
+        // finalisation as any other ending, which is the point: the audio
+        // captured before the disk filled is still worth closing properly.
+        if tracks.iter().all(|t| !t.is_writable()) {
+            warnings.push("every track stopped writing; ending the session".to_string());
+            break;
+        }
+
+        // Status is republished on the tick rather than on every packet: it
+        // takes a lock the interface also wants, and nothing reads it faster
+        // than a few times a second.
+        if last_publish.elapsed() >= TICK {
+            publish(&shared, &mut tracks, started_at);
+            last_publish = Instant::now();
+        }
     }
 
     set_state(&shared, RecorderState::Stopping);
@@ -363,8 +420,15 @@ fn run_session(
     loop {
         match rx.recv_timeout(Duration::from_millis(50)) {
             Ok((name, packet)) => {
-                if let Some(&i) = index.get(&name) {
-                    write_packet(&mut tracks[i], packet)?;
+                if let Some(&i) = index.get(name.as_ref()) {
+                    let track = &mut tracks[i];
+                    if track.is_writable() {
+                        if let Err(e) = write_packet(track, packet) {
+                            if let Some(warning) = track.fail("writing", &e) {
+                                warnings.push(warning);
+                            }
+                        }
+                    }
                 }
                 quiet_since = Instant::now();
             }
@@ -378,8 +442,18 @@ fn run_session(
     }
 
     for h in &mut handles {
-        if let Err(e) = h.join() {
-            warnings.push(format!("source {:?} ended with an error: {e}", h.name));
+        match h.join() {
+            // A dropped packet is audio the writer could not take in time. The
+            // timeline fills the hole with silence, so the file still lines up
+            // — but it is a hole, and it is the one kind of loss the recorder
+            // can see happening, so it is never left unsaid.
+            Ok(stats) if stats.dropped > 0 => warnings.push(format!(
+                "source {:?} lost {} packet(s) because the writer could not keep up; \
+                 the gaps are filled with silence",
+                h.name, stats.dropped
+            )),
+            Ok(_) => {}
+            Err(e) => warnings.push(format!("source {:?} ended with an error: {e}", h.name)),
         }
     }
 
@@ -391,7 +465,14 @@ fn run_session(
         .fold(0.0f64, f64::max);
     let end_qpc = session_t0 + (longest * 10_000_000.0) as i64;
     for t in &mut tracks {
-        t.track.finalize_to(end_qpc)?;
+        if !t.is_writable() {
+            continue;
+        }
+        if let Err(e) = t.track.finalize_to(end_qpc) {
+            if let Some(warning) = t.fail("padding to the session length", &e) {
+                warnings.push(warning);
+            }
+        }
     }
 
     let mut track_manifests = Vec::new();
@@ -406,7 +487,15 @@ fn run_session(
                 "track {name:?} passed 4 GB; its WAV header cannot describe the full length"
             ));
         }
-        wav.finish()?;
+        // Patching the header is what makes the file readable at all, so a
+        // failure here is worth saying loudly — and worth attempting on every
+        // other file regardless.
+        if let Err(e) = wav.finish() {
+            warnings.push(format!(
+                "track {name:?} could not be closed cleanly, so its header may \
+                 understate its length: {e}"
+            ));
+        }
         track_manifests.push(TrackManifest {
             name,
             file: t.file,
@@ -420,7 +509,7 @@ fn run_session(
         });
     }
 
-    let manifest = SessionManifest {
+    let mut manifest = SessionManifest {
         tool: "system-sound-recorder".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         started_utc,
@@ -436,9 +525,15 @@ fn run_session(
             .clone(),
     };
 
+    // Written last, and its failure is reported rather than raised: by this
+    // point the audio is closed and on disk, and losing the description of it
+    // is not a reason to tell the caller the recording failed.
     let manifest_path = out_dir.join("session.json");
-    std::fs::write(&manifest_path, manifest.to_json())
-        .with_context(|| format!("writing {}", manifest_path.display()))?;
+    if let Err(e) = std::fs::write(&manifest_path, manifest.to_json()) {
+        manifest
+            .warnings
+            .push(format!("the session manifest could not be written: {e}"));
+    }
 
     {
         let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
@@ -494,11 +589,36 @@ fn push_warnings(shared: &Arc<Mutex<Shared>>, warnings: &[String]) {
 }
 
 /// Copy the worker's view of every track into the shared snapshot.
+///
+/// Updated in place rather than rebuilt. Three of the fields — the name, the
+/// description and the file — never change for the life of a track, and
+/// rebuilding the vector allocated a fresh copy of all three on every publish.
 fn publish(shared: &Arc<Mutex<Shared>>, tracks: &mut [LiveTrack], started: Instant) {
     let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
     s.elapsed_secs = started.elapsed().as_secs_f64();
-    s.tracks.clear();
-    for t in tracks.iter_mut() {
+
+    if s.tracks.len() != tracks.len() {
+        s.tracks = tracks
+            .iter()
+            .map(|t| TrackSnapshot {
+                name: t.track.name().to_string(),
+                description: t.description.clone(),
+                file: t.file.clone(),
+                sample_rate: t.sample_rate,
+                channels: t.channels,
+                pid: t.pid,
+                duration_secs: 0.0,
+                peak: 0.0,
+                peak_db: -120.0,
+                rms_db: -120.0,
+                frames_captured: 0,
+                frames_silence: 0,
+                discontinuities: 0,
+            })
+            .collect();
+    }
+
+    for (snapshot, t) in s.tracks.iter_mut().zip(tracks.iter_mut()) {
         if t.sample_count > 0 {
             let rms = (t.sum_squares / t.sample_count as f64).sqrt() as f32;
             t.rms_db = to_db(rms);
@@ -506,21 +626,13 @@ fn publish(shared: &Arc<Mutex<Shared>>, tracks: &mut [LiveTrack], started: Insta
             t.sample_count = 0;
         }
         let stats = t.track.stats();
-        s.tracks.push(TrackSnapshot {
-            name: t.track.name().to_string(),
-            description: t.description.clone(),
-            file: t.file.clone(),
-            sample_rate: t.sample_rate,
-            channels: t.channels,
-            pid: t.pid,
-            duration_secs: t.track.duration_secs(),
-            peak: t.peak,
-            peak_db: to_db(t.peak),
-            rms_db: t.rms_db,
-            frames_captured: stats.frames_captured,
-            frames_silence: stats.frames_silence_filled,
-            discontinuities: stats.discontinuities,
-        });
+        snapshot.duration_secs = t.track.duration_secs();
+        snapshot.peak = t.peak;
+        snapshot.peak_db = to_db(t.peak);
+        snapshot.rms_db = t.rms_db;
+        snapshot.frames_captured = stats.frames_captured;
+        snapshot.frames_silence = stats.frames_silence_filled;
+        snapshot.discontinuities = stats.discontinuities;
         // Decay rather than reset, so a brief sound stays on the meter long
         // enough to be seen.
         t.peak *= METER_DECAY;

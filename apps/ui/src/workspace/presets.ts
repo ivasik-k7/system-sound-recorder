@@ -81,9 +81,9 @@ function proportion(api: DockviewApi, plan: { id: string; width?: number; height
 export const LAYOUT_PRESETS: LayoutPreset[] = [
   {
     id: 'transcribe',
-    name: 'Transcribe',
+    name: 'Conversation',
     description:
-      'A conversation being read as it is spoken, with the channels beside it and the activity below.',
+      'For reading a channel as it is spoken. The transcript takes the room, with the channels beside it — and recording carries on underneath if it was running.',
     sketch: ['d c c', 'd c c', 'l l l'],
     accent: ['c'],
     panels: ['conversation', 'discovery', 'log'],

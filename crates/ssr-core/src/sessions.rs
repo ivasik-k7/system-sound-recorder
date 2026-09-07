@@ -125,6 +125,21 @@ pub struct DiscoveredSource {
     pub endpoints: Vec<String>,
 }
 
+/// The part of a session that actually changes.
+///
+/// A full discovery snapshot is mostly text that is fixed for the life of a
+/// session: its key, the executable, the endpoint's name and GUID, the label,
+/// the category. Sending all of it several times a second to move a meter is
+/// most of the traffic and all of the garbage. This is what a meter needs.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionLevel {
+    pub key: String,
+    pub state: SessionState,
+    pub peak: f32,
+    pub channel_peaks: Vec<f32>,
+}
+
 /// Everything discovery found in one pass.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -196,6 +211,21 @@ struct LiveSession {
     /// The published row. State, peaks, volume and mute are refreshed in
     /// place; everything else was resolved when the session was first seen.
     info: AudioSessionInfo,
+}
+
+impl Discovery {
+    /// Just the levels, for the high-rate path.
+    pub fn levels(&self) -> Vec<SessionLevel> {
+        self.sessions
+            .iter()
+            .map(|s| SessionLevel {
+                key: s.key.clone(),
+                state: s.state,
+                peak: s.peak,
+                channel_peaks: s.channel_peaks.clone(),
+            })
+            .collect()
+    }
 }
 
 impl LiveSession {

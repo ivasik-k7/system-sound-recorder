@@ -5,10 +5,14 @@ much of the world recording a person speaking is regulated — sometimes by
 privacy law, sometimes by criminal law, usually by your employment contract as
 well.
 
-**None of what follows is legal advice.** It is a description of the questions
-that tend to matter, written so that you know which ones to ask. If a recording
-could end up in a dispute, a grievance, a disciplinary process or a court, ask a
-lawyer rather than a README.
+**None of what follows is legal advice**, and **the author of this program
+accepts no responsibility for what you do with it.** What follows is a
+description of the questions that tend to matter, written so that you know
+which ones to ask. If a recording could end up in a dispute, a grievance, a
+disciplinary process or a court, ask a lawyer rather than a README.
+
+See [No warranty, and no responsibility for use](#no-warranty-and-no-responsibility-for-use)
+for the position in full.
 
 ## The short version
 
@@ -127,20 +131,46 @@ processing happens.
 
 A transcript is often more sensitive than the audio, because it is searchable.
 
-## What the authors do and do not warrant
+## No warranty, and no responsibility for use
 
-This program is provided under the [MIT License](LICENSE), which disclaims
-warranties and limits liability. In plain terms:
+This program is a tool. It is distributed under the [MIT License](LICENSE),
+which disclaims all warranties and limits liability, and that disclaimer is
+meant seriously rather than as a formality.
 
-- It is offered as a tool, with no representation that any particular use of it
-  is lawful in your jurisdiction or permitted by your agreements.
-- Deciding what to record, telling the people involved, and looking after the
-  files afterwards are yours.
-- Nothing here creates a lawyer–client relationship or constitutes advice.
+In plain terms:
+
+- **The author accepts no responsibility or liability for how this program is
+  used**, for anything recorded with it, or for any consequence of that
+  recording — legal, disciplinary, contractual, reputational or financial.
+- **No representation is made that any particular use is lawful.** Whether
+  recording a given conversation is permitted where you are, and whether it is
+  allowed by your employer, your client, or the terms of the service you are
+  recording, is for you to establish. This program does not know where you are
+  or what you have agreed to.
+- **Deciding what may be recorded is yours.** So is obtaining whatever consent
+  is required, telling the people involved, and looking after the files
+  afterwards.
+- **You are solely responsible for compliance** with every law, regulation,
+  policy, contract and professional obligation that applies to you. If a
+  recording made with this program breaks any of them, that is your act and
+  your responsibility, not the author's.
+- **The program is provided as is**, with no warranty of merchantability,
+  fitness for a particular purpose, accuracy, or completeness. It may lose
+  audio, mis-time it, or fail to record at all; do not rely on it where a
+  failed recording would cause harm.
+- To the maximum extent permitted by applicable law, the author shall not be
+  liable for any claim, damages, loss or other liability, whether in an action
+  of contract, tort or otherwise, arising from or in connection with this
+  program or its use.
+- Nothing in this document or anywhere else in this project creates a
+  lawyer–client relationship or constitutes legal advice.
+
+If you are not willing to carry that responsibility yourself, do not use this
+program to record other people.
 
 ## If you are on the other side of this
 
-If you believe a recording of you was made with this program, the authors hold
+If you believe a recording of you was made with this program, the author holds
 no recordings and no logs: the program has no server component and reports
 nothing to anyone. Whoever ran it holds the files. See
 [PRIVACY.md](PRIVACY.md) for what the program does and does not do.

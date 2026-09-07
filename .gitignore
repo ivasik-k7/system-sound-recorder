@@ -20,6 +20,10 @@ node_modules/
 # searchable content of a conversation.
 /transcripts
 
+# Python bytecode, from the transcription worker
+__pycache__/
+*.pyc
+
 # Editors and operating systems
 .DS_Store
 Thumbs.db

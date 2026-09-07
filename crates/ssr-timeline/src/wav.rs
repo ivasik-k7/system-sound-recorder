@@ -26,6 +26,8 @@ const OFF_DATA_SIZE: u64 = OFF_FACT_SAMPLES + 4 + 4;
 /// A WAV file being streamed to disk.
 pub struct WavWriter {
     file: BufWriter<File>,
+    /// Reused silence, so filling a gap allocates nothing.
+    zeros: Vec<f32>,
     path: PathBuf,
     channels: u16,
     sample_rate: u32,
@@ -46,6 +48,7 @@ impl WavWriter {
         let file = File::create(&path).with_context(|| format!("creating {}", path.display()))?;
         let mut w = WavWriter {
             file: BufWriter::with_capacity(1 << 18, file),
+            zeros: Vec::new(),
             path,
             channels,
             sample_rate,
@@ -128,13 +131,22 @@ impl WavWriter {
         if frames == 0 {
             return Ok(());
         }
-        // Write in chunks so a long gap does not allocate a huge buffer.
+        // Written in chunks so a long gap does not allocate a huge buffer, and
+        // from a buffer kept on the writer so that an idle stream — which fills
+        // silence on every tick — does not allocate one per tick either.
         const CHUNK_FRAMES: u64 = 4096;
-        let zeros = vec![0f32; (CHUNK_FRAMES as usize) * self.channels as usize];
+        if self.zeros.is_empty() {
+            self.zeros = vec![0f32; (CHUNK_FRAMES as usize) * self.channels as usize];
+        }
         let mut left = frames;
         while left > 0 {
             let n = left.min(CHUNK_FRAMES) as usize;
-            self.write_samples(&zeros[..n * self.channels as usize])?;
+            // Split so the borrow of the buffer ends before the write, which
+            // needs the writer mutably.
+            let chunk = std::mem::take(&mut self.zeros);
+            let result = self.write_samples(&chunk[..n * self.channels as usize]);
+            self.zeros = chunk;
+            result?;
             left -= n as u64;
         }
         Ok(())

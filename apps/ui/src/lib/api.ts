@@ -13,6 +13,7 @@ import type {
   DeviceInfo,
   Discovery,
   DiskSpace,
+  SessionLevel,
   KnownApp,
   LibrarySession,
   Marker,
@@ -59,6 +60,17 @@ export const api = {
    */
   async discover(): Promise<Discovery> {
     return isDesktop() ? invoke<Discovery>('discover') : sim.discover()
+  },
+
+  /**
+   * Only the levels of the sessions already reported.
+   *
+   * What the meters poll. A full snapshot is mostly names, keys and endpoint
+   * GUIDs that do not change; resending them ten times a second to move a bar
+   * is most of the traffic and all of the garbage it creates.
+   */
+  async discoverLevels(): Promise<SessionLevel[]> {
+    return isDesktop() ? invoke<SessionLevel[]>('discover_levels') : sim.discoverLevels()
   },
 
   /** Ask discovery to refresh faster while something is watching it. */
@@ -108,6 +120,22 @@ export const api = {
 
   async diskSpace(path: string): Promise<DiskSpace> {
     return isDesktop() ? invoke<DiskSpace>('disk_space', { path }) : sim.diskSpace()
+  },
+
+  /**
+   * Open a web page in the user's own browser.
+   *
+   * Not a plain link: inside the desktop shell a link would navigate the
+   * webview, replacing the application with a web page and no way back. The
+   * opener plugin hands it to the browser instead.
+   */
+  async openUrl(url: string): Promise<void> {
+    if (!isDesktop()) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    const mod = await import('@tauri-apps/plugin-opener')
+    await mod.openUrl(url)
   },
 
   /** Ask the shell to open a folder in the file manager. */
@@ -633,6 +661,14 @@ const sim = (() => {
     },
     async rescan() {
       return discover()
+    },
+    async discoverLevels(): Promise<SessionLevel[]> {
+      return discover().sessions.map((s) => ({
+        key: s.key,
+        state: s.state,
+        peak: s.peak,
+        channelPeaks: s.channelPeaks,
+      }))
     },
     setDiscoveryRate(ms: number) {
       discoveryRate = ms

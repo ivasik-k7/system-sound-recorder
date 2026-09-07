@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { DockviewApi } from 'dockview'
 import { MenuItem, Modal, Popover } from './primitives'
-import { IconCheck, IconLayout, IconSave, IconTrash } from './Icons'
+import {
+  IconCheck,
+  IconChevronDown,
+  IconLayout,
+  IconRefresh,
+  IconSave,
+  IconTrash,
+} from './Icons'
 import { PANELS } from '../panels/registry'
 import {
   applyNamedLayout,
@@ -91,12 +98,16 @@ export function LayoutMenu({ api }: LayoutMenuProps) {
             title="Workspace arrangements"
           >
             <IconLayout size={13} /> Layout
+            <IconChevronDown size={11} className="btn__chevron" />
           </button>
         )}
       >
         {({ close }) => (
           <>
-            <div className="popover__label">Arrangements</div>
+            <div className="popover__header">
+              <span className="popover__headerTitle">Workspace</span>
+              <span className="popover__headerHint">or drag panels anywhere</span>
+            </div>
             <div className="layout-grid">
               {LAYOUT_PRESETS.map((preset) => (
                 <button
@@ -147,31 +158,36 @@ export function LayoutMenu({ api }: LayoutMenuProps) {
               </>
             )}
 
-            <div className="popover__separator" />
-            <MenuItem
-              icon={IconSave}
-              disabled={!api}
-              onClick={() => {
-                setNaming(true)
-                close()
-              }}
-            >
-              Save this arrangement…
-            </MenuItem>
-            <MenuItem
-              icon={IconLayout}
-              disabled={!api}
-              onClick={() => {
-                if (!api) return
-                clearLayout()
-                applyPreset(api, 'console')
-                setActive('console')
-                appendLog('info', 'Layout reset to the default arrangement.')
-                close()
-              }}
-            >
-              Reset to default
-            </MenuItem>
+            <div className="popover__footer">
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={!api}
+                onClick={() => {
+                  setNaming(true)
+                  close()
+                }}
+              >
+                <IconSave size={12} /> Save current…
+              </button>
+              <span className="spacer" />
+              <button
+                type="button"
+                className="btn btn--sm btn--ghost"
+                disabled={!api}
+                title="Back to the Console arrangement"
+                onClick={() => {
+                  if (!api) return
+                  clearLayout()
+                  applyPreset(api, 'console')
+                  setActive('console')
+                  appendLog('info', 'Layout reset to the default arrangement.')
+                  close()
+                }}
+              >
+                <IconRefresh size={12} /> Reset
+              </button>
+            </div>
           </>
         )}
       </Popover>
@@ -256,12 +272,16 @@ export function PanelsMenu({ api }: PanelsMenuProps) {
           title="Show a panel"
         >
           Panels
+          <IconChevronDown size={11} className="btn__chevron" />
         </button>
       )}
     >
       {({ close }) => (
         <>
-          <div className="popover__label">Panels</div>
+          <div className="popover__header">
+            <span className="popover__headerTitle">Panels</span>
+            <span className="popover__headerHint">{open.length} open</span>
+          </div>
           {PANELS.map((panel) => (
             <MenuItem
               key={panel.id}

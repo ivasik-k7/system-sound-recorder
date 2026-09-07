@@ -125,6 +125,14 @@ export interface DiscoveredSource {
   endpoints: string[]
 }
 
+/** The part of a session that changes: what a meter needs, and no more. */
+export interface SessionLevel {
+  key: string
+  state: SessionState
+  peak: number
+  channelPeaks: number[]
+}
+
 export interface Discovery {
   devices: DeviceInfo[]
   sessions: AudioSessionInfo[]

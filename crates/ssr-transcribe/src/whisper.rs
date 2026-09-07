@@ -7,6 +7,7 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
 use crate::engine::{Engine, EngineKind};
+use crate::spawn::without_window;
 use crate::transcript::Segment;
 
 /// Options that change what the engine does rather than how it is invoked.
@@ -116,7 +117,7 @@ fn run_whisper_cpp(
         command.arg("--translate");
     }
 
-    let output = command
+    let output = without_window(&mut command)
         .output()
         .with_context(|| format!("running {}", engine.executable.display()))?;
     if !output.status.success() {
@@ -206,7 +207,7 @@ fn run_whisper_python(
         command.arg("--threads").arg(threads.to_string());
     }
 
-    let output = command
+    let output = without_window(&mut command)
         .output()
         .with_context(|| format!("running {}", engine.executable.display()))?;
     if !output.status.success() {

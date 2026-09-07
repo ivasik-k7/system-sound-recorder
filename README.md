@@ -422,13 +422,20 @@ session. It is not legal advice, but it says which questions matter.
 The short version: tell people, check your employer's policy, and decide before
 you start where the file will live and for how long.
 
+**The author accepts no responsibility or liability for how this program is
+used, for anything recorded with it, or for any consequence of that recording.**
+Establishing that a recording is lawful and permitted, obtaining any consent
+required, and looking after the files afterwards are entirely yours. See
+[No warranty, and no responsibility for use](LEGAL.md#no-warranty-and-no-responsibility-for-use).
+
 As for the program itself — it has no server, sends nothing anywhere, and
 collects nothing about you. [PRIVACY.md](PRIVACY.md) sets out exactly what it
 reads, what it writes, and where.
 
 ## Licence
 
-[MIT](LICENSE). Third-party components and their licences, generated from the
+Copyright © 2026 Ivan Kovtun. Released under the [MIT License](LICENSE), which
+disclaims all warranties and limits liability. Third-party components and their licences, generated from the
 dependency graphs, are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md);
 [deny.toml](deny.toml) is the policy that keeps that list from quietly
 acquiring a licence nobody looked at.

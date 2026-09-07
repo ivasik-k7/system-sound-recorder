@@ -259,6 +259,9 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     let _apartment = ssr_core::com::Apartment::new();
+    // Transcription spawns a speech worker. Ctrl-C, or a terminal window being
+    // closed, must not leave it behind holding a model in memory.
+    let _kill_children_with_me = ssr_core::KillOnExit::install();
 
     match cli.command {
         Command::Devices { json } => devices(json),

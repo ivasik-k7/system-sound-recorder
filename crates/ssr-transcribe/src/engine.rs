@@ -52,6 +52,13 @@ pub struct Engine {
     pub executable: PathBuf,
     /// Model files found nearby, for engines that need one named.
     pub models: Vec<PathBuf>,
+    /// The interpreter that can run the resident worker, when there is one.
+    ///
+    /// Present only for the Python engines, and only when the interpreter that
+    /// owns the installation could be located. Without it the engine still
+    /// works, one process per utterance, which is far slower.
+    #[serde(default)]
+    pub interpreter: Option<PathBuf>,
 }
 
 impl Engine {
@@ -77,6 +84,15 @@ impl Engine {
     /// Whether this engine can actually run as configured.
     pub fn is_usable(&self) -> bool {
         !self.kind.needs_model_file() || !self.models.is_empty()
+    }
+
+    /// Whether this engine can be held open between utterances.
+    ///
+    /// The difference is not marginal. A one-shot engine spends five to fifteen
+    /// seconds starting Python and reading the model before it looks at any
+    /// audio, on every single utterance.
+    pub fn is_resident_capable(&self) -> bool {
+        self.interpreter.is_some()
     }
 }
 
@@ -129,6 +145,40 @@ fn find_executable(names: &[&str]) -> Option<PathBuf> {
                 if candidate.is_file() {
                     return Some(candidate);
                 }
+            }
+        }
+    }
+    None
+}
+
+/// The interpreter that owns a Python entry point.
+///
+/// pip puts `whisper.exe` in a `Scripts` directory beside the interpreter that
+/// installed it, so the one next door is the one that can import the package.
+/// Looking it up this way rather than searching `PATH` matters: on Windows
+/// `python` often resolves first to the Microsoft Store stub, which has no
+/// packages installed and would fail in a way that looks like a broken install.
+fn interpreter_beside(executable: &Path) -> Option<PathBuf> {
+    let scripts = executable.parent()?;
+    let names: &[&str] = if cfg!(windows) {
+        &["python.exe", "pythonw.exe"]
+    } else {
+        &["python3", "python"]
+    };
+
+    let mut roots = vec![scripts.to_path_buf()];
+    // A virtual environment or a per-user install keeps the interpreter one
+    // level above its Scripts directory.
+    if let Some(parent) = scripts.parent() {
+        roots.push(parent.to_path_buf());
+        roots.push(parent.join("bin"));
+    }
+
+    for root in roots {
+        for name in names {
+            let candidate = root.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
             }
         }
     }
@@ -192,15 +242,18 @@ pub fn detect() -> Vec<Engine> {
             label: EngineKind::WhisperCpp.label().to_string(),
             executable,
             models,
+            interpreter: None,
         });
     }
 
     if let Some(executable) = find_executable(&WHISPER_PY_NAMES) {
+        let interpreter = interpreter_beside(&executable);
         engines.push(Engine {
             kind: EngineKind::WhisperPython,
             label: EngineKind::WhisperPython.label().to_string(),
             executable,
             models: Vec::new(),
+            interpreter,
         });
     }
 
@@ -239,6 +292,7 @@ mod tests {
             label: "whisper.cpp".into(),
             executable: PathBuf::from("whisper-cli"),
             models: models.iter().map(PathBuf::from).collect(),
+            interpreter: None,
         }
     }
 
@@ -267,6 +321,7 @@ mod tests {
             label: "whisper".into(),
             executable: PathBuf::from("whisper"),
             models: Vec::new(),
+            interpreter: None,
         };
         assert!(e.is_usable());
     }

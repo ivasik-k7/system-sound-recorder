@@ -46,4 +46,41 @@ says nothing.
 
 ### Fixed
 
+- **A write failure part way through a session no longer loses the whole
+  recording.** An I/O error — the disk filling is the realistic one — used to
+  propagate out of the session worker, skipping finalisation: the WAV headers
+  were never patched and no manifest was written, so an hour of captured audio
+  was left in files that read as empty. A failing track is now retired with a
+  warning and everything else is closed properly.
+- **A stalled writer can no longer stall the audio engine.** The capture thread
+  handed each packet to the writer *before* releasing the WASAPI buffer, so a
+  slow disk blocked the buffer, overran the engine's ring and lost real audio.
+  The buffer is released first, and a handover that cannot complete within
+  250 ms drops the packet and counts it in the session warnings rather than
+  waiting.
+- Closing the window stopped the recording but left live transcription and its
+  speech worker running behind it.
+- Child processes are placed in a job object that dies with the program, so a
+  crash no longer orphans a speech worker holding a model in memory.
+- `PRIVACY.md` claimed nothing is written to a temporary directory. Recording
+  writes none, but transcription does — it chunks audio through `%TEMP%` — and
+  the document now says exactly what, where, and when it is not cleaned up.
 - Five clippy findings, all mechanical.
+
+### Performance
+
+- Status is published on the tick rather than on every packet, and updated in
+  place: three string allocations per track per publish became none.
+- Packets are routed by a shared key instead of allocating a copy of the track
+  name for every buffer.
+- The WAV writer reuses one silence buffer instead of allocating 32 KB each
+  time an idle track is topped up.
+- The interface keeps level history in ring buffers. It was copying two
+  nine-hundred-element arrays per track per poll — about a third of a megabyte
+  a second of garbage on a five-track session.
+- Meters poll a levels-only call, about a twelfth the size of a full discovery
+  snapshot, with a full pass on the slow cadence that finds new sessions.
+- Timeline redraws are coalesced into one animation frame instead of one per
+  poll per track.
+- Polling stops while the window is hidden. The recording is on the engine's
+  own thread and is unaffected.

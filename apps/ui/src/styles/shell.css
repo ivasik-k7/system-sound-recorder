@@ -4,13 +4,26 @@
 
 .titlebar {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-left: 12px;
+  align-items: stretch;
+  padding-left: 10px;
   background: linear-gradient(var(--bg-chrome-top), var(--bg-chrome));
   border-bottom: 1px solid var(--border);
   /* Everything except the controls drags the window. */
   -webkit-app-region: drag;
+  min-width: 0;
+}
+
+/* The header is read as four zones, left to right: what this program is, what
+   the window is currently for, what can be rearranged, and — pushed to the
+   right — what state it is in and the utilities. Hairline rules separate them,
+   which is what stops eight controls of similar weight reading as one
+   undifferentiated row. */
+.titlebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  flex: none;
   min-width: 0;
 }
 
@@ -27,6 +40,15 @@
   flex: none;
 }
 
+/* The version, in the header rather than buried in About, because it is the
+   first thing anyone is asked for in a bug report. */
+.titlebar__version {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2);
+  color: var(--text-3);
+}
+
 .titlebar__subtitle {
   font-size: var(--fs-2);
   color: var(--text-3);
@@ -36,18 +58,47 @@
   white-space: nowrap;
 }
 
-.titlebar__menus {
+/* A zone of controls. Interactive, so it must not drag the window. */
+.titlebar__group {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
+  padding: 0 8px;
   flex: none;
   -webkit-app-region: no-drag;
+}
+
+.titlebar__rule {
+  width: 1px;
+  align-self: center;
+  height: 18px;
+  flex: none;
+  background: var(--border);
 }
 
 .titlebar__spacer {
   flex: 1;
   min-width: 8px;
   align-self: stretch;
+}
+
+/* Recording state, on the right where the eye ends up. The transport below
+   carries the clock; this is only the light, so that a window scrolled down to
+   a single panel still says whether it is running. */
+.titlebar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  font-size: var(--fs-2);
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--t-mid) var(--ease);
+}
+
+.titlebar__status--live {
+  color: var(--record);
 }
 
 .titlebar__controls {
@@ -192,11 +243,16 @@
 
 /* --------------------------------------------------------- status bar --- */
 
+/* The footer is a strip of small readouts, and nearly all of them do
+   something when clicked: the ones that report a problem jump to the panel
+   that explains it, and the ones that report a place open it. An indicator
+   that cannot be acted on is a decoration, so the few that are genuinely
+   inert are marked as such and styled flat. */
 .statusbar {
   display: flex;
-  align-items: center;
-  gap: var(--pad-lg);
-  padding: 0 var(--pad-lg);
+  align-items: stretch;
+  gap: 0;
+  padding: 0 6px;
   background: linear-gradient(var(--bg-chrome-top), var(--bg-chrome));
   border-top: 1px solid var(--border);
   font-size: var(--fs-2);
@@ -205,48 +261,149 @@
   overflow: hidden;
 }
 
-.statusbar__item {
+/* One readout. A button element when it acts, a span when it does not, with
+   the same geometry either way so the strip stays even. */
+.pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex: none;
-  white-space: nowrap;
-}
-
-.statusbar__item--button {
+  align-self: center;
   height: 20px;
-  padding: 0 7px;
-  margin: 0 -4px;
+  padding: 0 8px;
+  flex: none;
   background: transparent;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--r-xs);
   color: inherit;
   font: inherit;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   cursor: default;
-  transition: background var(--t-fast) var(--ease);
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
 }
 
-.statusbar__item--button:hover {
+button.pill:hover:not(:disabled) {
   background: var(--bg-hover);
+  border-color: var(--border-soft);
   color: var(--text);
 }
 
-.statusbar__item--warn {
+button.pill:active:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.pill--static {
+  color: var(--text-3);
+}
+
+.pill__icon {
+  display: inline-flex;
+  color: var(--text-3);
+  flex: none;
+}
+
+button.pill:hover .pill__icon {
+  color: var(--text-2);
+}
+
+/* A readout carrying a number worth reading at a glance. */
+.pill__value {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.pill--live {
+  color: var(--record);
+}
+
+.pill--live .pill__icon,
+.pill--live .pill__value {
+  color: var(--record);
+}
+
+.pill--ok .pill__icon {
+  color: var(--ok);
+}
+
+.pill--warn {
   color: var(--warn);
 }
 
-.statusbar__item--danger {
+.pill--warn .pill__icon,
+.pill--warn .pill__value {
+  color: var(--warn);
+}
+
+.pill--danger {
   color: var(--danger);
 }
 
-.statusbar__last {
+.pill--danger .pill__icon,
+.pill--danger .pill__value {
+  color: var(--danger);
+}
+
+button.pill--warn:hover:not(:disabled) {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+
+button.pill--danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.statusbar__rule {
+  width: 1px;
+  align-self: center;
+  height: 14px;
+  flex: none;
+  margin: 0 4px;
+  background: var(--border-soft);
+}
+
+/* The last thing the recorder said. Takes the slack, and is the first thing
+   given up when the window narrows. */
+.statusbar__message {
   flex: 1;
   min-width: 0;
+  align-self: center;
+  padding: 0 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-3);
-  text-align: right;
+}
+
+/* A capacity bar small enough to live in the footer. Reading "39 GB free" is
+   slower than seeing a bar four fifths full. */
+.pill__gauge {
+  width: 34px;
+  height: 4px;
+  flex: none;
+  border-radius: var(--r-pill);
+  background: var(--meter-track);
+  overflow: hidden;
+}
+
+.pill__gaugeFill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--ok);
+  transition:
+    width var(--t-slow) var(--ease),
+    background var(--t-mid) var(--ease);
+}
+
+.pill__gaugeFill--warn {
+  background: var(--warn);
+}
+
+.pill__gaugeFill--danger {
+  background: var(--danger);
 }
 
 /* ------------------------------------------------------ command palette --- */

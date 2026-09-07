@@ -9,7 +9,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DockviewApi } from 'dockview'
 import { CommandBar } from './components/CommandBar'
 import { CommandPalette } from './components/CommandPalette'
-import { ModeSwitch } from './components/ModeSwitch'
 import { SaveDialog } from './components/SaveDialog'
 import { ShortcutsSheet } from './components/ShortcutsSheet'
 import { StatusBar } from './components/StatusBar'
@@ -27,6 +26,25 @@ import { PRESETS_BY_ID } from './workspace/presets'
 
 /** How fast discovery refreshes when nothing is watching it closely. */
 const IDLE_DISCOVERY_MS = 1000
+
+/**
+ * Whether this window is actually on screen.
+ *
+ * The recorder is meant to be left open for hours, frequently minimised. There
+ * is no reason to poll levels ten times a second, redraw canvases and rebuild
+ * meter state for a window nobody can see — the recording is on the engine's
+ * own thread and is unaffected by any of it. Polling resumes on the next tick
+ * after the window comes back.
+ */
+function useVisible(): boolean {
+  const [visible, setVisible] = useState(() => !document.hidden)
+  useEffect(() => {
+    const update = () => setVisible(!document.hidden)
+    document.addEventListener('visibilitychange', update)
+    return () => document.removeEventListener('visibilitychange', update)
+  }, [])
+  return visible
+}
 
 /** The panel id when this window is a torn-off satellite, else null. */
 function satellitePanelId(): string | null {
@@ -58,15 +76,16 @@ function useSnapshotPolling() {
   const poll = useStore((s) => s.poll)
   const snapshot = useStore((s) => s.snapshot)
   const refreshMs = useStore((s) => s.prefs.refreshMs)
+  const visible = useVisible()
   const live = isRecording(snapshot)
 
   useEffect(() => {
-    if (!live) return
+    if (!live || !visible) return
     // A plain interval is enough: the work is one small message per tick, and
     // the meters are smoothed by the ballistics rather than by the poll rate.
     const handle = window.setInterval(() => void poll(), refreshMs)
     return () => window.clearInterval(handle)
-  }, [live, poll, refreshMs])
+  }, [live, visible, poll, refreshMs])
 }
 
 /**
@@ -80,17 +99,32 @@ function useSnapshotPolling() {
  */
 function useDiscoveryPolling(watching: boolean) {
   const pollDiscovery = useStore((s) => s.pollDiscovery)
+  const pollLevels = useStore((s) => s.pollLevels)
   const discoveryMs = useStore((s) => s.prefs.discoveryMs)
+  const visible = useVisible()
 
   useEffect(() => {
+    if (!visible) {
+      // Let the engine idle too, rather than only stopping the collection.
+      void api.setDiscoveryRate(IDLE_DISCOVERY_MS)
+      return
+    }
     const rate = watching ? discoveryMs : IDLE_DISCOVERY_MS
     void api.setDiscoveryRate(rate)
-    // One pass immediately, so a panel that has just been opened is not blank
-    // for the length of an interval.
+    // One full pass immediately, so a panel that has just been opened is not
+    // blank for the length of an interval.
     void pollDiscovery()
-    const handle = window.setInterval(() => void pollDiscovery(), rate)
-    return () => window.clearInterval(handle)
-  }, [watching, discoveryMs, pollDiscovery])
+
+    // Two cadences. The meters want the levels at the chosen rate; the rest of
+    // a snapshot is fixed text that only changes when a session starts or
+    // ends, which the engine itself only rescans for about once a second.
+    const levels = window.setInterval(() => void pollLevels(), rate)
+    const full = window.setInterval(() => void pollDiscovery(), Math.max(rate, 1000))
+    return () => {
+      window.clearInterval(levels)
+      window.clearInterval(full)
+    }
+  }, [watching, visible, discoveryMs, pollDiscovery, pollLevels])
 }
 
 /**
@@ -103,7 +137,6 @@ function useDiscoveryPolling(watching: boolean) {
 function useDemoSeed(enabled: boolean) {
   const addSource = useStore((s) => s.addSource)
   const start = useStore((s) => s.start)
-  const mode = useConversation((s) => s.mode)
   const chooseTarget = useConversation((s) => s.chooseTarget)
   const startListening = useConversation((s) => s.start)
   const seeded = useRef(false)
@@ -114,27 +147,23 @@ function useDemoSeed(enabled: boolean) {
     if (!enabled || seeded.current || isDesktop()) return
     seeded.current = true
 
-    // The address is read directly rather than the store, because the effect
-    // that applies it has not necessarily run yet and seeding the wrong mode
-    // starts the wrong thing.
-    if ((requestedMode() ?? mode) === 'listen') {
-      // The transcription mode has its own thing to demonstrate: a conversation
-      // arriving line by line, with the voices told apart.
-      chooseTarget(
-        { kind: 'app', target: 'wfica32.exe', exclude: false, label: null },
-        'Citrix HDX session',
-      )
-      void startListening()
-      return
-    }
-
     addSource({ kind: 'system', device: 'default', label: null })
     addSource({ kind: 'app', target: 'wfica32.exe', exclude: false, label: null })
     addSource({ kind: 'app', target: 'ms-teams.exe', exclude: false, label: null })
     addSource({ kind: 'app', target: 'chrome.exe', exclude: false, label: null })
     addSource({ kind: 'input', device: 'default', label: null })
     void start()
-  }, [enabled, mode, addSource, start, chooseTarget, startListening])
+
+    // And, when asked, listen to one of those channels at the same time —
+    // which is the ordinary case rather than an alternative one.
+    if (wantsListening()) {
+      chooseTarget(
+        { kind: 'app', target: 'wfica32.exe', exclude: false, label: null },
+        'Citrix HDX session',
+      )
+      void startListening()
+    }
+  }, [enabled, addSource, start, chooseTarget, startListening])
 }
 
 function SatelliteWindow({ panelId, demo }: { panelId: string; demo: boolean }) {
@@ -195,29 +224,6 @@ function MainWindow({ demo }: { demo: boolean }) {
   useConversationPolling()
   useDiscoveryPolling(watchingDiscovery)
   useDemoSeed(demo)
-
-  const mode = useConversation((s) => s.mode)
-  const setMode = useConversation((s) => s.setMode)
-  const lastMode = useRef<string | null>(null)
-
-  useEffect(() => {
-    const wanted = requestedMode()
-    if (wanted) setMode(wanted)
-  }, [setMode])
-
-  useEffect(() => {
-    // Not on the first pass: the layout restored from last time is the user's
-    // own and should not be replaced simply because the window opened.
-    if (lastMode.current === null) {
-      lastMode.current = mode
-      return
-    }
-    if (lastMode.current === mode) return
-    lastMode.current = mode
-    if (dock) {
-      applyPreset(dock, mode === 'listen' ? 'transcribe' : 'console')
-    }
-  }, [mode, dock])
 
   useEffect(() => {
     void refresh()
@@ -303,10 +309,10 @@ function MainWindow({ demo }: { demo: boolean }) {
 
   return (
     <div className="app-shell">
-      <TitleBar api={dock} onShowShortcuts={() => setShortcuts(true)} extra={<ModeSwitch />} />
+      <TitleBar api={dock} onShowShortcuts={() => setShortcuts(true)} />
       <CommandBar />
       <Workspace onApi={onApi} />
-      <StatusBar />
+      <StatusBar api={dock} />
       <Toasts />
       <SaveDialog />
       {palette && <CommandPalette api={dock} onClose={() => setPalette(false)} />}
@@ -315,11 +321,15 @@ function MainWindow({ demo }: { demo: boolean }) {
   )
 }
 
-/** Which mode to open in, when the address says. Useful for a shortcut that
- *  goes straight to transcribing, and for reviewing either mode on its own. */
-function requestedMode(): 'record' | 'listen' | null {
-  const value = new URLSearchParams(window.location.search).get('mode')
-  return value === 'listen' || value === 'record' ? value : null
+/**
+ * Whether the address asks for live transcription as well as recording.
+ *
+ * `?listen=1`, or the older `?mode=listen`. Not a mode: it turns one more
+ * thing on, the way arming a track does.
+ */
+function wantsListening(): boolean {
+  const params = new URLSearchParams(window.location.search)
+  return params.has('listen') || params.get('mode') === 'listen'
 }
 
 export default function App() {

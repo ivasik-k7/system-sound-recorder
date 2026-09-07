@@ -14,12 +14,20 @@ import {
   type ListenConfig,
   type ListenStatus,
   type SaveRequest,
+  type ModelDownload,
+  type ModelInfo,
   type SaveResult,
   type TranscriptFormat,
 } from '../lib/transcribe'
 import type { SourceRequest } from '../lib/types'
 
-/** Which of the two things the application is doing. */
+/**
+ * Which of the two things the application is doing.
+ *
+ * Set when a channel is sent to be transcribed rather than by a switch: the
+ * choice that matters is which channel, and having chosen one there is nothing
+ * left for a mode to decide.
+ */
 export type Mode = 'record' | 'listen'
 
 interface ConversationState {
@@ -31,6 +39,14 @@ interface ConversationState {
   target: SourceRequest | null
   targetLabel: string
   detectSpeakers: boolean
+  /** Empty means let the engine work it out. */
+  language: string
+  /** Which model to load. Bigger is better and slower. */
+  model: string
+  /** The models on offer, and which are already here. */
+  models: ModelInfo[]
+  /** A download in progress, when there is one. */
+  download: ModelDownload | null
   busy: boolean
   error: string | null
   /** Whether the save dialog is open. */
@@ -40,6 +56,11 @@ interface ConversationState {
   loadEngines: () => Promise<void>
   chooseTarget: (source: SourceRequest, label: string) => void
   setDetectSpeakers: (on: boolean) => void
+  setLanguage: (code: string) => void
+  setModel: (id: string) => void
+  loadModels: () => Promise<void>
+  fetchModel: (id: string) => Promise<void>
+  pollDownload: () => Promise<void>
   start: () => Promise<void>
   stop: () => Promise<void>
   poll: () => Promise<void>
@@ -62,6 +83,10 @@ export const useConversation = create<ConversationState>((set, get) => ({
   target: null,
   targetLabel: '',
   detectSpeakers: true,
+  language: '',
+  model: 'base',
+  models: [],
+  download: null,
   busy: false,
   error: null,
   saving: false,
@@ -77,6 +102,7 @@ export const useConversation = create<ConversationState>((set, get) => ({
   async loadEngines() {
     try {
       set({ engines: await transcribeApi.engines(), error: null })
+      void get().loadModels()
     } catch (e) {
       set({ error: e instanceof Error ? e.message : String(e) })
     }
@@ -90,8 +116,51 @@ export const useConversation = create<ConversationState>((set, get) => ({
     set({ detectSpeakers: on })
   },
 
+  setLanguage(code) {
+    set({ language: code })
+  },
+
+  setModel(id) {
+    set({ model: id })
+  },
+
+  async loadModels() {
+    try {
+      set({ models: await transcribeApi.models() })
+    } catch {
+      // Not worth reporting: the models list is a convenience, and the engine
+      // will still download on demand if it has to.
+    }
+  },
+
+  async fetchModel(id) {
+    try {
+      const download = await transcribeApi.downloadModel(id)
+      set({ download, error: null })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  async pollDownload() {
+    const current = get().download
+    if (!current || !current.active) return
+    try {
+      const download = await transcribeApi.downloadStatus()
+      set({ download })
+      if (download.done) {
+        // The list carries the cached flag, so it has to be re-read before the
+        // interface can stop offering to fetch something already here.
+        await get().loadModels()
+        if (download.error) set({ error: download.error })
+      }
+    } catch {
+      // The next poll will either work or the job has gone.
+    }
+  },
+
   async start() {
-    const { target, targetLabel, detectSpeakers } = get()
+    const { target, targetLabel, detectSpeakers, language, model } = get()
     if (!target) {
       set({ error: 'Choose a channel to listen to first.' })
       return
@@ -101,6 +170,8 @@ export const useConversation = create<ConversationState>((set, get) => ({
       source: target,
       label: targetLabel || 'Channel',
       detectSpeakers,
+      language: language || null,
+      model: model || null,
     }
     try {
       const status = await transcribeApi.startListening(config)

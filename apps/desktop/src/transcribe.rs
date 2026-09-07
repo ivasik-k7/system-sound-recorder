@@ -143,10 +143,38 @@ impl ListenStatus {
     }
 }
 
+/// How many lines the session keeps in memory.
+///
+/// The transcript file is the complete record and is appended to a line at a
+/// time, so nothing is lost by forgetting the beginning of a long meeting here.
+/// Holding all of it would mean an hour of talk sitting in memory twice over,
+/// once in this process and once in the interface, for the sake of scrollback
+/// nobody reads while the meeting is still running.
+const LINES_KEPT: usize = 2_000;
+
 /// Shared between the listening thread and whoever is watching it.
 struct Shared {
     lines: Vec<Line>,
+    /// Lines dropped from the front, so indexing stays correct after trimming.
+    dropped: usize,
     status: ListenStatus,
+}
+
+impl Shared {
+    /// Add lines, forgetting the oldest once there are too many.
+    fn extend(&mut self, fresh: impl IntoIterator<Item = Line>) {
+        self.lines.extend(fresh);
+        if self.lines.len() > LINES_KEPT {
+            let excess = self.lines.len() - LINES_KEPT;
+            self.lines.drain(0..excess);
+            self.dropped += excess;
+        }
+    }
+
+    /// Total produced, including those no longer held.
+    fn total(&self) -> usize {
+        self.dropped + self.lines.len()
+    }
 }
 
 /// A running live transcription.
@@ -180,7 +208,7 @@ impl LiveSession {
 
         // Capture first, so the endpoint's real format is known before the
         // listener is built around it.
-        let (tx, rx) = bounded::<(String, Packet)>(512);
+        let (tx, rx) = bounded::<(ssr_core::source::TrackKey, Packet)>(512);
         let spec = config.source.to_spec(48_000, 2);
         let handle = ssr_core::start("listen", spec, config.buffer_ms, tx)
             .map_err(|e| anyhow!("that channel could not be opened: {e}"))?;
@@ -199,6 +227,7 @@ impl LiveSession {
 
         let shared = Arc::new(Mutex::new(Shared {
             lines: Vec::new(),
+            dropped: 0,
             status: ListenStatus {
                 active: true,
                 channel: config.label.clone(),
@@ -228,7 +257,7 @@ impl LiveSession {
                 // while someone was talking, and an utterance would never be
                 // closed by the pause that ended it.
                 let top_up = |listener: &mut Listener, elapsed: f64| {
-                    let behind = (elapsed - 0.5) - listener.heard_secs();
+                    let behind = (elapsed - 0.3) - listener.heard_secs();
                     if behind > 0.05 {
                         let n = (behind.min(5.0) * ENGINE_RATE as f64) as usize;
                         listener.push(&vec![0.0f32; n]);
@@ -254,10 +283,10 @@ impl LiveSession {
                     let fresh = listener.drain();
                     let backlog = listener.backlog();
                     if let Ok(mut s) = worker_shared.lock() {
-                        s.lines.extend(fresh);
+                        s.extend(fresh);
                         s.status.elapsed_secs = started.elapsed().as_secs_f64();
                         s.status.backlog = backlog;
-                        s.status.total_lines = s.lines.len();
+                        s.status.total_lines = s.total();
                         s.status.speakers = distinct_speakers(&s.lines);
                     }
                 }
@@ -273,10 +302,10 @@ impl LiveSession {
                 // the queue is drained rather than abandoned.
                 let remaining = listener.finish();
                 if let Ok(mut s) = worker_shared.lock() {
-                    s.lines.extend(remaining);
+                    s.extend(remaining);
                     s.status.active = false;
                     s.status.backlog = 0;
-                    s.status.total_lines = s.lines.len();
+                    s.status.total_lines = s.total();
                     s.status.speakers = distinct_speakers(&s.lines);
                 }
                 let _ = std::fs::remove_dir_all(&work_dir);
@@ -303,7 +332,13 @@ impl LiveSession {
     pub fn lines_after(&self, after: usize) -> Vec<Line> {
         self.shared
             .lock()
-            .map(|s| s.lines.iter().skip(after).cloned().collect())
+            .map(|s| {
+                // `after` counts from the start of the conversation, but the
+                // oldest lines may have been forgotten. Anything the caller
+                // missed entirely is gone; the file still has it.
+                let skip = after.saturating_sub(s.dropped);
+                s.lines.iter().skip(skip).cloned().collect()
+            })
             .unwrap_or_default()
     }
 
@@ -520,4 +555,167 @@ pub fn save_conversation(request: SaveRequest) -> Result<SaveResult> {
         directory: request.directory.display().to_string(),
         files,
     })
+}
+
+// --- models ------------------------------------------------------------------
+
+/// A model the user can choose, and whether it is already here.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfo {
+    pub id: String,
+    pub label: String,
+    /// What choosing it means, in plain terms.
+    pub hint: String,
+    /// Roughly what it will cost to fetch, in bytes.
+    pub approximate_bytes: u64,
+    /// True when it is on the machine and will load without a download.
+    pub cached: bool,
+    /// What it actually occupies, once it is here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<u64>,
+}
+
+/// The models worth offering, smallest first.
+///
+/// Sizes are the download, not the memory it needs while running, which is
+/// larger. The advice matters more than the numbers: for anything but clear
+/// English the jump from base to small is the one that changes the answer.
+const CATALOGUE: &[(&str, &str, &str, u64)] = &[
+    (
+        "tiny",
+        "Tiny",
+        "Fastest, roughest. Usable for English only.",
+        75_000_000,
+    ),
+    (
+        "base",
+        "Base",
+        "Fine for clear English. Weak on other languages.",
+        145_000_000,
+    ),
+    (
+        "small",
+        "Small",
+        "The first size worth using for Ukrainian and other languages.",
+        480_000_000,
+    ),
+    (
+        "medium",
+        "Medium",
+        "Better again, and noticeably slower on a processor.",
+        1_500_000_000,
+    ),
+    (
+        "large-v3",
+        "Large",
+        "Best available. Slow without a graphics card.",
+        3_100_000_000,
+    ),
+];
+
+#[tauri::command]
+pub fn list_speech_models() -> Vec<ModelInfo> {
+    CATALOGUE
+        .iter()
+        .map(|(id, label, hint, approximate)| ModelInfo {
+            id: (*id).to_string(),
+            label: (*label).to_string(),
+            hint: (*hint).to_string(),
+            approximate_bytes: *approximate,
+            cached: ssr_transcribe::resident::is_model_cached(id),
+            bytes: ssr_transcribe::resident::cached_model_size(id),
+        })
+        .collect()
+}
+
+/// How a model download is going.
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelDownload {
+    pub active: bool,
+    pub model: String,
+    pub fraction: f64,
+    pub bytes: u64,
+    pub total: u64,
+    pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// A download running in the background.
+pub struct DownloadJob {
+    status: Arc<Mutex<ModelDownload>>,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl DownloadJob {
+    pub fn start(model: String, engine_name: Option<String>) -> Result<Self> {
+        let engine = choose(engine_name.as_deref())?;
+        let interpreter = engine.interpreter.clone().ok_or_else(|| {
+            anyhow!(
+                "downloading needs the Python interpreter that owns the whisper \
+                 install, and it could not be found next to {}",
+                engine.executable.display()
+            )
+        })?;
+
+        let status = Arc::new(Mutex::new(ModelDownload {
+            active: true,
+            model: model.clone(),
+            ..ModelDownload::default()
+        }));
+
+        let work_dir = std::env::temp_dir().join(format!("ssr-download-{}", std::process::id()));
+        let worker_status = status.clone();
+        let worker = std::thread::Builder::new()
+            .name("ssr-model-download".into())
+            .spawn(move || {
+                let progress_status = worker_status.clone();
+                let outcome = ssr_transcribe::resident::download_model(
+                    &interpreter,
+                    &work_dir,
+                    &model,
+                    move |p| {
+                        if let Ok(mut s) = progress_status.lock() {
+                            s.fraction = p.fraction;
+                            s.bytes = p.bytes;
+                            s.total = p.total;
+                        }
+                    },
+                );
+
+                if let Ok(mut s) = worker_status.lock() {
+                    s.active = false;
+                    s.done = true;
+                    match outcome {
+                        Ok(()) => s.fraction = 1.0,
+                        Err(e) => s.error = Some(format!("{e:#}")),
+                    }
+                }
+                let _ = std::fs::remove_dir_all(&work_dir);
+            })
+            .context("starting the download")?;
+
+        Ok(DownloadJob {
+            status,
+            worker: Some(worker),
+        })
+    }
+
+    pub fn status(&self) -> ModelDownload {
+        self.status.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.status().active
+    }
+}
+
+impl Drop for DownloadJob {
+    fn drop(&mut self) {
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
 }

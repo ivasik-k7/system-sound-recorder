@@ -19,11 +19,13 @@ import {
   IconSearch,
   IconChevronDown,
   IconChevronRight,
+  IconMessage,
 } from '../components/Icons'
 import { decibels, pidSummary, plural } from '../lib/format'
 import { emptyMeter } from '../lib/meters'
 import type { AudioSessionInfo, DiscoveredSource, SourceCategory } from '../lib/types'
 import { useStore } from '../state/store'
+import { useConversation } from '../state/conversation'
 
 /** One shared empty list.
  *
@@ -65,6 +67,10 @@ function SourceRow({ source }: { source: DiscoveredSource }) {
   const [open, setOpen] = useState(false)
   const addDiscovered = useStore((s) => s.addDiscovered)
   const planned = useStore((s) => s.planned)
+  const chooseTarget = useConversation((s) => s.chooseTarget)
+  const startListening = useConversation((s) => s.start)
+  const listenTarget = useConversation((s) => s.target)
+  const listenStatus = useConversation((s) => s.status)
   const sessionMeters = useStore((s) => s.sessionMeters)
   const floor = useStore((s) => s.prefs.meterFloor)
   const sessions = useStore((s) => s.discovery)?.sessions ?? NO_SESSIONS
@@ -88,6 +94,12 @@ function SourceRow({ source }: { source: DiscoveredSource }) {
     }
     return loudest
   }, [mine, sessionMeters])
+
+  // Whether this is the channel currently being transcribed.
+  const beingHeard =
+    listenStatus.active &&
+    listenTarget?.kind === 'app' &&
+    listenTarget.target.toLowerCase() === source.exe.toLowerCase()
 
   const Icon = categoryIcon(source.category)
   const iconClass = source.playing
@@ -146,12 +158,12 @@ function SourceRow({ source }: { source: DiscoveredSource }) {
             <MiniMeter
               meter={meter}
               floor={floor}
-              width={72}
+              width={54}
               title={`${source.label}: ${decibels(meter.peakDb)} dB`}
             />
             <span
               className="mono faint text-xs"
-              style={{ width: 32, textAlign: 'right', flex: 'none' }}
+              style={{ width: 28, textAlign: 'right', flex: 'none' }}
             >
               {decibels(meter.peakDb, 0)}
             </span>
@@ -162,6 +174,9 @@ function SourceRow({ source }: { source: DiscoveredSource }) {
           {/* Whether a source is already in the session is the button's
               business, not a badge's: it is the same fact, and as a badge it
               competes for width with the name. */}
+          {/* Two things can be done with a discovered channel, and they are
+              not alternatives: record it to a file, and read it as words.
+              Either, both, or neither. */}
           <button
             type="button"
             className={`btn btn--sm${source.playing && !alreadyPlanned ? ' btn--accent-quiet' : ''}`}
@@ -175,6 +190,25 @@ function SourceRow({ source }: { source: DiscoveredSource }) {
           >
             {alreadyPlanned ? <IconCheck size={12} /> : <IconPlus size={12} />}
             {alreadyPlanned ? 'Added' : 'Add'}
+          </button>
+          <button
+            type="button"
+            className={`btn btn--sm btn--icon${beingHeard ? ' btn--accent-quiet' : ''}`}
+            title={
+              beingHeard
+                ? `Reading ${source.label} as it is spoken`
+                : `Read ${source.label} as it is spoken, in the Conversation panel`
+            }
+            aria-label={`Transcribe ${source.label}`}
+            onClick={() => {
+              chooseTarget(
+                { kind: 'app', target: source.exe, exclude: false, label: null },
+                source.label,
+              )
+              void startListening()
+            }}
+          >
+            <IconMessage size={12} />
           </button>
         </div>
       </div>

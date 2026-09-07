@@ -33,6 +33,48 @@ import type {
 /** Meter samples the timeline keeps per track: ninety seconds at ten a second. */
 export const HISTORY_LENGTH = 900
 
+/**
+ * A track's recent levels, as a ring.
+ *
+ * Written in place. The obvious shape — two plain arrays, copied and pushed on
+ * every poll — costs two nine-hundred-element copies per track per poll, which
+ * on a five-track session is about a third of a megabyte a second of garbage.
+ * For a program that is meant to sit open for hours that is the difference
+ * between no collector pauses and regular ones, so the samples live in typed
+ * arrays that are allocated once and never grow.
+ *
+ * The wrapper object is replaced on each poll even though the buffers are not,
+ * because that is what tells React the plot has something new to draw.
+ */
+export interface History {
+  peak: Float32Array
+  rms: Float32Array
+  /** Where the next sample goes. */
+  next: number
+  /** Valid samples, up to HISTORY_LENGTH. */
+  count: number
+}
+
+function emptyHistory(): History {
+  return {
+    peak: new Float32Array(HISTORY_LENGTH),
+    rms: new Float32Array(HISTORY_LENGTH),
+    next: 0,
+    count: 0,
+  }
+}
+
+/**
+ * The i-th most recent sample, counting back from zero.
+ *
+ * Reading through this rather than unrolling the ring into an array keeps the
+ * draw path allocation-free as well.
+ */
+export function historyAt(history: History, fromEnd: number): { peak: number; rms: number } {
+  const index = (history.next - 1 - fromEnd + HISTORY_LENGTH * 2) % HISTORY_LENGTH
+  return { peak: history.peak[index] ?? -120, rms: history.rms[index] ?? -120 }
+}
+
 /** How many log lines are kept. A long session must not grow this forever. */
 const LOG_LIMIT = 800
 
@@ -174,8 +216,8 @@ interface AppState {
   meters: Record<string, MeterState>
   /** The same for discovered audio sessions, keyed by session key. */
   sessionMeters: Record<string, MeterState>
-  /** Rolling level history per track name, oldest first. */
-  history: Record<string, { peak: number[]; rms: number[] }>
+  /** Rolling level history per track name. */
+  history: Record<string, History>
 
   library: LibrarySession[]
   libraryLoading: boolean
@@ -191,6 +233,7 @@ interface AppState {
 
   refreshInventory: () => Promise<void>
   pollDiscovery: () => Promise<void>
+  pollLevels: () => Promise<void>
   rescan: () => Promise<void>
 
   addSource: (request: SourceRequest, options?: { quiet?: boolean }) => boolean
@@ -391,6 +434,48 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  /**
+   * Refresh only the meters.
+   *
+   * The descriptions a session comes with — its key, its executable, the
+   * endpoint it plays to — are fixed for its lifetime, so the fast path asks
+   * for the levels alone and folds them into the snapshot already held. A full
+   * pass still runs on the slow cadence, which is what notices a session
+   * appearing or ending.
+   */
+  async pollLevels() {
+    try {
+      const levels = await api.discoverLevels()
+      const now = Date.now()
+      const ballistics: Ballistics = { ...DEFAULT_BALLISTICS, holdMs: get().prefs.holdMs }
+
+      set((s) => {
+        if (!s.discovery) return {}
+        const sessionMeters: Record<string, MeterState> = {}
+        const byKey = new Map(levels.map((l) => [l.key, l]))
+        for (const session of s.discovery.sessions) {
+          const level = byKey.get(session.key)
+          // A session the fast path no longer mentions has ended; its meter is
+          // kept as it was until the next full pass drops the row, rather than
+          // snapping to silence.
+          const db =
+            level === undefined || level.peak <= 0.000001
+              ? -120
+              : 20 * Math.log10(level.peak)
+          sessionMeters[session.key] = advanceMeter(
+            s.sessionMeters[session.key],
+            { peakDb: db, rmsDb: db },
+            now,
+            ballistics,
+          )
+        }
+        return { sessionMeters }
+      })
+    } catch {
+      // As elsewhere: one failed poll is not news.
+    }
+  },
+
   async rescan() {
     try {
       const discovery = await api.rescan()
@@ -554,12 +639,17 @@ export const useStore = create<AppState>((set, get) => ({
             now,
             ballistics,
           )
-          const prev = history[track.name] ?? { peak: [], rms: [] }
-          const peak = prev.peak.length >= HISTORY_LENGTH ? prev.peak.slice(1) : prev.peak.slice()
-          const rms = prev.rms.length >= HISTORY_LENGTH ? prev.rms.slice(1) : prev.rms.slice()
-          peak.push(track.peakDb)
-          rms.push(track.rmsDb)
-          history[track.name] = { peak, rms }
+          const ring = history[track.name] ?? emptyHistory()
+          ring.peak[ring.next] = track.peakDb
+          ring.rms[ring.next] = track.rmsDb
+          // A new wrapper over the same buffers: cheap, and it is what makes
+          // the plot notice.
+          history[track.name] = {
+            peak: ring.peak,
+            rms: ring.rms,
+            next: (ring.next + 1) % HISTORY_LENGTH,
+            count: Math.min(ring.count + 1, HISTORY_LENGTH),
+          }
         }
         return { snapshot, meters, history }
       })

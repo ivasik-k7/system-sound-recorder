@@ -21,6 +21,7 @@ use crossbeam_channel::{bounded, Receiver, Sender};
 use serde::{Deserialize, Serialize};
 
 use crate::engine::Engine;
+use crate::resident::Resident;
 use crate::speakers::{self, Diariser, Speaker};
 use crate::transcript::{Segment, Transcript};
 use crate::vad;
@@ -104,17 +105,56 @@ impl LiveFormat {
 
 /// Turns audio into words. A trait so the listener can be tested without a
 /// speech engine and a model on the machine.
+/// A piece of recognised speech and where it sits inside the utterance.
+///
+/// Returned separately rather than joined into one string, and that is the
+/// whole point of it. An utterance can be twenty seconds of two people talking;
+/// joining it gives one late paragraph attributed to one voice. Keeping the
+/// pieces gives a line each, at the time each was actually said, and lets the
+/// voice behind each one be looked at on its own.
+#[derive(Debug, Clone)]
+pub struct Heard {
+    /// Seconds from the start of the utterance, not of the session.
+    pub start: f64,
+    pub end: f64,
+    pub text: String,
+}
+
 pub trait Recogniser: Send {
-    /// Recognise one utterance. Returning an empty string means nothing was
-    /// said, which is a normal outcome rather than a failure.
-    fn recognise(&mut self, samples: &[f32], sample_rate: u32) -> Result<String>;
+    /// Recognise one utterance. An empty result means nothing was said, which
+    /// is a normal outcome rather than a failure.
+    fn recognise(&mut self, samples: &[f32], sample_rate: u32) -> Result<Vec<Heard>>;
+
+    /// Get ready, before there is anything to recognise.
+    ///
+    /// Called once on the recognition thread as listening begins. Loading a
+    /// speech model takes seconds, and on a cold cache it means downloading a
+    /// hundred megabytes or more. Doing it here means it overlaps with someone
+    /// clearing their throat, rather than delaying the first thing they say.
+    fn warm(&mut self) {}
 }
 
 /// A recogniser backed by an installed speech engine.
+///
+/// Prefers to hold the engine open. A one-shot engine spends five to fifteen
+/// seconds starting an interpreter and reading the model before it looks at any
+/// audio, and it pays that on every utterance, which during a conversation is
+/// the difference between transcription happening quietly and the machine
+/// visibly grinding. Where the engine cannot be held open this still works, one
+/// process at a time, because slow transcription beats none.
 pub struct EngineRecogniser {
     engine: Engine,
     options: whisper::Options,
     work_dir: PathBuf,
+    /// Started on first use rather than up front, so that loading the model —
+    /// which on a cold cache means downloading it — happens on the recognition
+    /// thread instead of blocking whoever pressed Listen.
+    resident: Option<Resident>,
+    /// Set once the resident route has been tried and found wanting, so it is
+    /// not retried for every utterance of a long meeting.
+    resident_unavailable: bool,
+    /// Why, kept for the first report.
+    resident_problem: Option<String>,
 }
 
 impl EngineRecogniser {
@@ -125,23 +165,104 @@ impl EngineRecogniser {
             engine,
             options,
             work_dir,
+            resident: None,
+            resident_unavailable: false,
+            resident_problem: None,
         })
+    }
+
+    /// Whether this will hold the engine open, which is worth telling the user.
+    pub fn will_be_resident(&self) -> bool {
+        self.engine.is_resident_capable()
+    }
+
+    /// Why the engine could not be held open, once that is known.
+    pub fn resident_problem(&self) -> Option<&str> {
+        self.resident_problem.as_deref()
+    }
+
+    /// Recognise through the held-open engine, starting it if needed.
+    fn try_resident(&mut self, samples: &[f32]) -> Option<Result<Vec<Heard>>> {
+        if self.resident_unavailable {
+            return None;
+        }
+        let interpreter = self.engine.interpreter.clone()?;
+
+        if self.resident.is_none() {
+            let dir = crate::resident::work_dir_for(&self.work_dir);
+            match Resident::start(&interpreter, &dir, &self.options) {
+                Ok(started) => self.resident = Some(started),
+                Err(e) => {
+                    self.resident_unavailable = true;
+                    self.resident_problem = Some(format!("{e:#}"));
+                    return None;
+                }
+            }
+        }
+
+        let resident = self.resident.as_mut()?;
+        match resident.transcribe(samples, &self.options) {
+            Ok(recognised) => Some(Ok(pieces_of(&recognised))),
+            Err(e) => {
+                // A worker that has died is not worth restarting mid
+                // conversation; fall back and keep the words coming.
+                self.resident = None;
+                self.resident_unavailable = true;
+                self.resident_problem = Some(format!("{e:#}"));
+                None
+            }
+        }
     }
 }
 
+/// The pieces of a result, with the empty ones dropped.
+fn pieces_of(recognised: &whisper::Recognised) -> Vec<Heard> {
+    recognised
+        .segments
+        .iter()
+        .filter(|s| !s.text.trim().is_empty())
+        .map(|s| Heard {
+            start: s.start,
+            end: s.end,
+            text: s.text.trim().to_string(),
+        })
+        .collect()
+}
+
 impl Recogniser for EngineRecogniser {
-    fn recognise(&mut self, samples: &[f32], _sample_rate: u32) -> Result<String> {
+    fn warm(&mut self) {
+        // An empty utterance is not sent; starting the worker is the point, and
+        // any failure is remembered so the first real utterance falls straight
+        // through to the slower route instead of waiting again.
+        if self.resident_unavailable || self.resident.is_some() {
+            return;
+        }
+        let Some(interpreter) = self.engine.interpreter.clone() else {
+            return;
+        };
+        let dir = crate::resident::work_dir_for(&self.work_dir);
+        match Resident::start(&interpreter, &dir, &self.options) {
+            Ok(started) => self.resident = Some(started),
+            Err(e) => {
+                self.resident_unavailable = true;
+                self.resident_problem = Some(format!("{e:#}"));
+            }
+        }
+    }
+
+    fn recognise(&mut self, samples: &[f32], _sample_rate: u32) -> Result<Vec<Heard>> {
+        if let Some(outcome) = self.try_resident(samples) {
+            return outcome;
+        }
+
+        // The one-shot route. A file is needed here because the command line
+        // program only takes a path, and that path is what makes it reach for
+        // ffmpeg; the held-open worker takes the samples directly and needs
+        // neither.
         let audio = self.work_dir.join("utterance.wav");
         crate::audio::write_wav_16k_mono(&audio, samples)?;
         let recognised = whisper::run(&self.engine, &audio, &self.work_dir, &self.options)?;
-        let text = recognised
-            .segments
-            .iter()
-            .map(|s| s.text.trim())
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ");
-        Ok(text)
+        Ok(pieces_of(&recognised))
     }
 }
 
@@ -158,7 +279,28 @@ pub struct Listener {
     sample_rate: u32,
 }
 
+/// The audio behind one recognised piece, when there is enough of it to judge.
+///
+/// A voice print from a fifth of a second is noise, and feeding noise to the
+/// speaker grouping invents speakers. Below that the utterance as a whole is
+/// the better answer.
+fn slice_for<'a>(samples: &'a [f32], sample_rate: u32, piece: &Heard) -> Option<&'a [f32]> {
+    const SHORTEST: f64 = 0.25;
+    if piece.end - piece.start < SHORTEST {
+        return None;
+    }
+    let rate = sample_rate as f64;
+    let from = ((piece.start * rate) as usize).min(samples.len());
+    let to = ((piece.end * rate) as usize).clamp(from, samples.len());
+    if to - from < (SHORTEST * rate) as usize {
+        return None;
+    }
+    Some(&samples[from..to])
+}
+
 struct Job {
+    /// Kept for ordering work that is not reassembled by index yet.
+    #[allow(dead_code)]
     index: usize,
     start: f64,
     end: f64,
@@ -187,35 +329,67 @@ impl Listener {
         let worker = std::thread::Builder::new()
             .name("ssr-listen".into())
             .spawn(move || {
+                // Before anything is said, not after. This is where the model
+                // gets loaded, and it is the one genuinely slow step.
+                recogniser.warm();
+
+                let mut next_index = 0usize;
                 for job in jobs {
                     worker_backlog.fetch_sub(1, Ordering::SeqCst);
 
-                    let text = match recogniser.recognise(&job.samples, sample_rate) {
-                        Ok(t) => t,
+                    let pieces = match recogniser.recognise(&job.samples, sample_rate) {
+                        Ok(pieces) => pieces,
                         // A failed utterance should not end the session. The
                         // next one may well work, and the audio is still being
                         // recorded regardless.
-                        Err(e) => format!("[not recognised: {e}]"),
+                        Err(e) => vec![Heard {
+                            start: 0.0,
+                            end: job.end - job.start,
+                            text: format!("[not recognised: {e}]"),
+                        }],
                     };
-                    if text.trim().is_empty() {
-                        continue;
+
+                    // The voice of the whole utterance, used when a piece is
+                    // too short to judge on its own.
+                    let overall = speakers::voice_print(&job.samples, sample_rate);
+
+                    let mut sent_any = false;
+                    for piece in pieces {
+                        if piece.text.trim().is_empty() {
+                            continue;
+                        }
+
+                        // Classify each piece on its own audio. This is what
+                        // notices that the second half of an utterance was
+                        // somebody else, which looking at the whole thing at
+                        // once cannot do.
+                        let print = match slice_for(&job.samples, sample_rate, &piece) {
+                            Some(slice) => speakers::voice_print(slice, sample_rate),
+                            None => overall,
+                        };
+                        let speaker = diariser.assign(&print);
+
+                        next_index += 1;
+                        let line = Line {
+                            index: next_index,
+                            channel: channel.clone(),
+                            speaker,
+                            // Piece timings are relative to the utterance; the
+                            // conversation wants them relative to the session.
+                            start: job.start + piece.start,
+                            end: job.start + piece.end,
+                            text: piece.text,
+                        };
+
+                        writer.append(&line);
+                        if to_caller.send(line).is_err() {
+                            break;
+                        }
+                        sent_any = true;
                     }
 
-                    let print = speakers::voice_print(&job.samples, sample_rate);
-                    let speaker = diariser.assign(&print);
-
-                    let line = Line {
-                        index: job.index,
-                        channel: channel.clone(),
-                        speaker,
-                        start: job.start,
-                        end: job.end,
-                        text,
-                    };
-
-                    writer.append(&line);
-                    if to_caller.send(line).is_err() {
-                        break;
+                    if !sent_any {
+                        continue;
                     }
                 }
             })
@@ -418,23 +592,51 @@ mod tests {
     struct Parrot(&'static str);
 
     impl Recogniser for Parrot {
-        fn recognise(&mut self, _samples: &[f32], _rate: u32) -> Result<String> {
-            Ok(self.0.to_string())
+        fn recognise(&mut self, samples: &[f32], rate: u32) -> Result<Vec<Heard>> {
+            Ok(vec![Heard {
+                start: 0.0,
+                end: samples.len() as f64 / rate as f64,
+                text: self.0.to_string(),
+            }])
+        }
+    }
+
+    /// Splits every utterance in two, to check that one utterance can become
+    /// several lines with their own timings and their own speaker.
+    #[allow(dead_code)]
+    struct Splitter;
+
+    impl Recogniser for Splitter {
+        fn recognise(&mut self, samples: &[f32], rate: u32) -> Result<Vec<Heard>> {
+            let whole = samples.len() as f64 / rate as f64;
+            let middle = whole / 2.0;
+            Ok(vec![
+                Heard {
+                    start: 0.0,
+                    end: middle,
+                    text: "first half".into(),
+                },
+                Heard {
+                    start: middle,
+                    end: whole,
+                    text: "second half".into(),
+                },
+            ])
         }
     }
 
     struct Silent;
 
     impl Recogniser for Silent {
-        fn recognise(&mut self, _samples: &[f32], _rate: u32) -> Result<String> {
-            Ok(String::new())
+        fn recognise(&mut self, _samples: &[f32], _rate: u32) -> Result<Vec<Heard>> {
+            Ok(Vec::new())
         }
     }
 
     struct Broken;
 
     impl Recogniser for Broken {
-        fn recognise(&mut self, _samples: &[f32], _rate: u32) -> Result<String> {
+        fn recognise(&mut self, _samples: &[f32], _rate: u32) -> Result<Vec<Heard>> {
             anyhow::bail!("the model could not be loaded")
         }
     }

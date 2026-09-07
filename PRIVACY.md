@@ -25,7 +25,21 @@ embeds its own.
 **Recordings.** Where you tell it to, and nowhere else. By default that is a
 `System Sound Recorder` folder inside your Documents directory, with one dated
 subfolder per session containing a WAV file per track and a `session.json`
-manifest. Nothing is written to a temporary directory in passing.
+manifest. Recording writes nothing to a temporary directory in passing.
+
+**Audio in transit, while transcribing.** Transcription is the exception, and
+it is worth being exact about. Speech engines read files rather than streams, so
+transcribing cuts the audio into short chunks and writes them to a working
+directory under your temporary folder — `%TEMP%\ssr-listen-<pid>` while reading
+a channel live, `%TEMP%\ssr-job-*` for a finished session — passing each to the
+engine and deleting the directory when it finishes. The chunks are ordinary
+audio of whatever is being transcribed.
+
+They are removed when transcription ends normally. They are **not** removed if
+the program is killed or the machine loses power part way through, and there is
+no way for a program that is no longer running to tidy up after itself. If that
+matters for what you are transcribing, clear `%TEMP%` afterwards. Nothing else
+in the program writes audio anywhere but the folder you chose.
 
 **The session manifest** records what was captured: the track names, what each
 one tapped — an endpoint name or an executable name such as `wfica32.exe` — the
@@ -38,7 +52,11 @@ data directory. They are preferences, not history: no record of what you
 recorded or when is kept there.
 
 **Transcripts**, if you use the transcription feature, are written next to the
-audio they came from.
+audio they came from, or to a `transcripts` folder for a channel read live.
+
+**A speech worker's model cache**, if you use transcription, is managed by
+whichever engine you installed and lives wherever that engine keeps it. This
+program neither downloads nor stores models itself.
 
 That is the complete list. The program creates no other files, no database, and
 no log on disk.
