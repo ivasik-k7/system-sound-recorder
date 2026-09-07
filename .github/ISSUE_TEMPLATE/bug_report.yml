@@ -1,0 +1,92 @@
+name: Bug report
+description: Something does not work, or a recording came back wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please do not attach recordings of real people**, even to demonstrate
+        a problem. A tone or your own voice is enough. See
+        [LEGAL.md](https://github.com/ivasik-k7/system-sound-recorder/blob/main/LEGAL.md).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you observed, rather than what you think caused it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      placeholder: |
+        1. ssr rec --system --app wfica32.exe
+        2. Start a Citrix call
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      options:
+        - The desktop application
+        - The command line (ssr)
+        - Both
+        - The interface running in a browser against the simulator
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: '`ssr --version`, or the installer you used.'
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: 'From `winver` — for example, 11 24H2 (build 26100).'
+    validations:
+      required: true
+
+  - type: textarea
+    id: manifest
+    attributes:
+      label: The session manifest, if a recording is involved
+      description: |
+        `session.json` from the session folder. It contains no audio: it records
+        what each track tapped, and how much of it the recorder had to
+        manufacture as silence — which is usually where the answer is.
+      render: json
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: Engine trace, if you have one
+      description: |
+        Run with `SSR_TRACE=1` and paste the output. From WSL this also needs
+        `WSLENV=SSR_TRACE`, or the variable does not cross into Windows.
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Anything unusual about the audio setup
+      description: |
+        Bluetooth headset, virtual audio cable, a Citrix or VDI policy, an
+        exclusive-mode application, a 5.1 endpoint. This is where the cause
+        usually is.

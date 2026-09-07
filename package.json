@@ -1,0 +1,18 @@
+{
+  "name": "system-sound-recorder",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Record system audio from Citrix, WSL and every other application on a Windows machine.",
+  "workspaces": [
+    "apps/ui"
+  ],
+  "scripts": {
+    "ui:dev": "npm --workspace apps/ui run dev",
+    "ui:build": "npm --workspace apps/ui run build",
+    "ui:typecheck": "npm --workspace apps/ui run typecheck",
+    "desktop:dev": "./scripts/dev-desktop.sh",
+    "desktop:build": "./scripts/build-desktop.sh",
+    "cli:build": "./scripts/build-cli.sh",
+    "verify": "cargo test && npm --workspace apps/ui run typecheck"
+  }
+}

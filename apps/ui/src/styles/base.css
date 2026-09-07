@@ -1,0 +1,200 @@
+/* Reset, typography and the things every surface inherits. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-app);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* This is a desktop program, not a document: text should not be draggable
+     or selectable by accident. Panels that hold real content opt back in. */
+  user-select: none;
+  cursor: default;
+}
+
+/* Numbers that change every tenth of a second must not change width while
+   they do it, or the whole row jitters. */
+.tnum,
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* A soft ring rather than a hard outline, and only for keyboard users. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-sm);
+  /* Above whatever it sits next to, so the ring is never clipped by a
+     neighbouring surface. */
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------- scrollbars --- */
+
+/* Thin, and only visible against something that is being scrolled. A
+   permanent scrollbar in every one of a dozen panels is a lot of furniture. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 3px solid transparent;
+  border-radius: var(--r-pill);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------- shell --- */
+
+.app-shell {
+  display: grid;
+  /* minmax(0, ...) in both directions, and it has to be on the track rather
+     than the container.
+     A plain `1fr` is `minmax(auto, 1fr)`, and that automatic minimum is the
+     content's own minimum size, so a dense panel makes the track grow instead
+     of scrolling inside it. `min-height: 0` on the grid element does not help:
+     the element is not what refuses to shrink, the track is. The result is a
+     shell larger than the window, with the status bar below the bottom edge
+     and the rightmost column past the right one. Whether it shows up depends
+     on the window size, which is why it can look correct in one place and
+     broken in another. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows:
+    var(--titlebar-height) var(--commandbar-height) minmax(0, 1fr)
+    var(--statusbar-height);
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell--satellite {
+  grid-template-rows: var(--titlebar-height) minmax(0, 1fr);
+}
+
+.app-workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+/* -------------------------------------------------------------- utilities --- */
+
+.spacer {
+  flex: 1;
+}
+
+.truncate {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.rowline {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.faint {
+  color: var(--text-3);
+}
+
+.text-sm {
+  font-size: var(--fs-3);
+}
+
+.text-xs {
+  font-size: var(--fs-2);
+}
+
+.selectable {
+  user-select: text;
+  cursor: text;
+}
+
+/* Everything that moves, moves at the same speed, and nothing moves at all
+   for anyone who has asked for that. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,427 @@
+/* Level meters, mixer strips and the timeline.
+ *
+ * The part of the interface that has to be right. Everything else here is
+ * furniture; this is the instrument, and it is what someone stares at for an
+ * hour to satisfy themselves that a recording is still happening.
+ */
+
+.meter-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pad);
+  padding: var(--pad);
+}
+
+.meter {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px var(--gap);
+  align-items: center;
+  min-width: 0;
+}
+
+.meter__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meter__name {
+  font-size: var(--fs-3);
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter__readout {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2);
+  color: var(--text-2);
+  flex: none;
+}
+
+.meter__readout strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* --- the bar ----------------------------------------------------------- */
+
+.meter__bar {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 11px;
+  background: var(--meter-track);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+/* The average level, which is what tells you how loud the material is. The
+   gradient is fixed to the bar rather than to the fill, so a given colour
+   always sits at the same decibel value however long the fill happens to be:
+   a fill whose own gradient stretched would report a different colour for the
+   same level. */
+.meter__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--r-pill);
+  background-image: linear-gradient(
+    90deg,
+    var(--meter-low) 0%,
+    var(--meter-low) 62%,
+    var(--meter-mid) 78%,
+    var(--meter-high) 90%,
+    var(--meter-clip) 100%
+  );
+  background-size: var(--meter-width, 100%) 100%;
+  background-repeat: no-repeat;
+  transition: width 70ms linear;
+}
+
+/* The instantaneous peak, drawn as a hairline. Two marks rather than one
+   because peak and average are different questions: the average says how
+   loud it is, the peak says whether it is about to clip. */
+.meter__peak {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--meter-hold);
+  opacity: 0.9;
+  transition: left 70ms linear;
+}
+
+/* The loudest peak of the last couple of seconds, held so a transient that
+   lasted one frame is still visible. Without this a sharp click that clipped
+   the recording is invisible unless you happened to be looking. */
+.meter__hold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text);
+  opacity: 0.45;
+  transition: left var(--t-slow) var(--ease);
+}
+
+.meter__scale {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  color: var(--text-3);
+}
+
+.meter__tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.meter__tick--edge-left {
+  transform: none;
+  left: 0;
+}
+
+.meter__tick--edge-right {
+  transform: none;
+  right: 0;
+}
+
+.meter__detail {
+  grid-column: 1 / -1;
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- clip indicator ---------------------------------------------------- */
+
+/* Latching, and it stays lit until it is cleared. A clip light that fades on
+   its own is a clip light that can be missed, and a clipped recording cannot
+   be repaired afterwards. */
+.clip-led {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 17px;
+  padding: 0 6px;
+  flex: none;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--border);
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  font-size: var(--fs-1);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+
+.clip-led--lit {
+  background: var(--meter-clip);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 0 10px -2px var(--meter-clip);
+}
+
+/* --- mixer strips ------------------------------------------------------ */
+
+/* The vertical view. Horizontal meters are better for reading a number;
+   vertical strips side by side are better for comparing eight tracks at
+   once, which is the question a multitrack session actually raises. */
+.mixer {
+  display: flex;
+  gap: var(--gap);
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  padding: var(--pad);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 78px;
+  flex: none;
+  padding: var(--pad) 7px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: inset 0 1px 0 var(--edge-light);
+  min-height: 0;
+}
+
+.strip--wide {
+  width: 96px;
+}
+
+.strip__name {
+  font-size: var(--fs-2);
+  font-weight: 600;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip__sub {
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip__meters {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  flex: 1;
+  min-height: 60px;
+}
+
+/* One column per channel, so a 5.1 endpoint shows six. */
+.vmeter {
+  position: relative;
+  width: 12px;
+  flex: none;
+  background: var(--meter-track);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+.vmeter--single {
+  width: 20px;
+}
+
+.vmeter__fill {
+  position: absolute;
+  inset: auto 0 0 0;
+  background-image: linear-gradient(
+    0deg,
+    var(--meter-low) 0%,
+    var(--meter-low) 62%,
+    var(--meter-mid) 78%,
+    var(--meter-high) 90%,
+    var(--meter-clip) 100%
+  );
+  background-size: 100% var(--meter-height, 100%);
+  background-position: bottom;
+  background-repeat: no-repeat;
+  transition: height 70ms linear;
+}
+
+.vmeter__hold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--meter-hold);
+  opacity: 0.8;
+  transition: bottom var(--t-slow) var(--ease);
+}
+
+.vmeter__grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.6;
+}
+
+.strip__scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 22px;
+  flex: none;
+  padding: 1px 0;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--text-3);
+  text-align: right;
+}
+
+.strip__readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-2);
+  text-align: center;
+  color: var(--text);
+}
+
+.strip__buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+/* --- timeline ---------------------------------------------------------- */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--pad);
+}
+
+.timeline__track {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap);
+  font-size: var(--fs-2);
+  min-width: 0;
+}
+
+.timeline__name {
+  font-weight: 600;
+  font-size: var(--fs-3);
+}
+
+.timeline__plot {
+  position: relative;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+.timeline__canvas {
+  display: block;
+  width: 100%;
+  height: 62px;
+}
+
+.timeline__canvas--tall {
+  height: 96px;
+}
+
+/* A marker is drawn over the plot in the DOM rather than on the canvas, so it
+   can carry a tooltip and be clicked. */
+.timeline__marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed var(--accent);
+  pointer-events: none;
+}
+
+.timeline__marker::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 0 0 6px 0;
+  background: var(--accent);
+}
+
+/* Follows the pointer, reading out the value under it. */
+.timeline__cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--text-2);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.timeline__hover {
+  position: absolute;
+  top: 4px;
+  padding: 2px 6px;
+  background: var(--bg-chrome-top);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  box-shadow: var(--shadow-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+/* --- sparkline --------------------------------------------------------- */
+
+.sparkline {
+  display: block;
+  width: 100%;
+  height: 22px;
+}

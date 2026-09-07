@@ -1,0 +1,516 @@
+/* Panels, rows, cards and badges: the containers everything else sits in. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+/* A panel's toolbar is chrome, so it is a shade above the panel body and
+   separated by a hairline rather than by a gap. */
+.panel__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 38px;
+  padding: 5px var(--pad);
+  background: linear-gradient(var(--bg-chrome-top), var(--bg-chrome));
+  border-bottom: 1px solid var(--border);
+}
+
+.panel__toolbar--wrap {
+  flex-wrap: wrap;
+}
+
+.panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.panel__body--pad {
+  padding: var(--pad);
+}
+
+.panel__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  flex: none;
+  padding: 6px var(--pad);
+  background: var(--bg-chrome);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-2);
+  color: var(--text-2);
+}
+
+/* --- section headings -------------------------------------------------- */
+
+/* Sticky, because these panels are long lists and a heading that scrolls away
+   leaves you reading rows without knowing what they are. */
+.section {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px var(--pad) 5px;
+  background: linear-gradient(var(--bg-panel) 70%, transparent);
+  font-size: var(--fs-1);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.section__count {
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-3);
+  text-transform: none;
+}
+
+.section__line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
+}
+
+/* --- rows -------------------------------------------------------------- */
+
+/* Rows are cards with the corners softened rather than lines in a table.
+   That is most of what stops a panel of twenty sources looking like a
+   spreadsheet. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  min-height: var(--row-h);
+  margin: 2px 6px;
+  padding: 5px var(--pad);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+}
+
+.row--interactive:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-soft);
+}
+
+.row--selected {
+  background: var(--bg-selected);
+  border-color: var(--accent-line);
+}
+
+/* Something is playing through this source right now. A left edge rather
+   than a fill, so a list of twelve rows with three of them live still reads
+   as a list. */
+.row--live {
+  border-left-color: var(--ok);
+  box-shadow: inset 2px 0 0 var(--ok);
+}
+
+.row--muted-source {
+  opacity: 0.55;
+}
+
+.row__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-xs);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  color: var(--text-2);
+}
+
+.row__icon--accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.row__icon--live {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-3);
+  font-weight: 500;
+  min-width: 0;
+}
+
+/* The name takes the room and gives it up last. Without the explicit
+   `flex: 1 1 auto` it has no basis to grow from, and two badges beside it are
+   enough to squeeze it to a single ellipsis — which is exactly the wrong thing
+   to lose from a row whose whole purpose is to name something. */
+.row__title > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__subtitle {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Actions appear on hover, so a long list is quiet until it is being used.
+   They stay visible when focused, or they would be unreachable by keyboard. */
+.row__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+}
+
+.row:hover .row__actions,
+.row:focus-within .row__actions,
+.row__actions--always {
+  opacity: 1;
+}
+
+.row__expand {
+  padding: var(--pad) var(--pad) var(--pad) 42px;
+  margin: -2px 6px 4px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-2);
+  color: var(--text-2);
+}
+
+/* --- cards ------------------------------------------------------------- */
+
+.card {
+  padding: var(--pad-lg);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: inset 0 1px 0 var(--edge-light);
+}
+
+.card__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.card-grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+/* A number with a label under it. Used throughout diagnostics, where the
+   whole panel is readouts. */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--pad);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  min-width: 0;
+}
+
+.stat__value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-5);
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.stat__label {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+}
+
+.stat--ok .stat__value {
+  color: var(--ok);
+}
+
+.stat--warn .stat__value {
+  color: var(--warn);
+}
+
+.stat--danger .stat__value {
+  color: var(--danger);
+}
+
+/* --- badges ------------------------------------------------------------ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 19px;
+  padding: 0 8px;
+  flex: none;
+  border-radius: var(--r-pill);
+  background: var(--bg-active);
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: var(--fs-1);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge--accent {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.badge--record {
+  background: var(--record-soft);
+  border-color: var(--record);
+  color: var(--record);
+}
+
+.badge--ok {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.badge--warn {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.badge--danger {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.badge--quiet {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-3);
+}
+
+.badge--mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* --- status dot -------------------------------------------------------- */
+
+.dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.dot--ok {
+  background: var(--ok);
+}
+
+.dot--warn {
+  background: var(--warn);
+}
+
+.dot--danger {
+  background: var(--danger);
+}
+
+.dot--live {
+  background: var(--record);
+  animation: throb 1.6s var(--ease) infinite;
+}
+
+@keyframes throb {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 var(--record-glow);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+/* --- empty states ------------------------------------------------------ */
+
+/* A panel with nothing in it yet is an opportunity to say what it is for,
+   which is most of the documentation this program has. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 140px;
+  padding: 28px 24px;
+  text-align: center;
+  color: var(--text-3);
+}
+
+.empty__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--r-md);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  color: var(--text-3);
+}
+
+.empty__title {
+  font-size: var(--fs-4);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.empty__text {
+  max-width: 320px;
+  font-size: var(--fs-3);
+  line-height: 1.55;
+}
+
+/* --- inline notice ----------------------------------------------------- */
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 6px;
+  padding: 9px 11px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.notice--warn {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.notice--danger {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.notice--accent {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.notice__icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* --- code and logs ----------------------------------------------------- */
+
+.code {
+  margin: 0;
+  padding: var(--pad);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3);
+  line-height: 1.6;
+  white-space: pre;
+  user-select: text;
+  color: var(--text-2);
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* A channel of a stream, named. Monospaced so a row of six lines up. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  color: var(--text-2);
+}
+
+/* --- activity log ------------------------------------------------------ */
+
+.log {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3);
+  user-select: text;
+  padding: 4px 0;
+}
+
+.log__line {
+  display: flex;
+  gap: 10px;
+  padding: 2px var(--pad);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-left: 2px solid transparent;
+}
+
+.log__time {
+  flex: none;
+  color: var(--text-3);
+}
+
+.log__line--warn {
+  color: var(--warn);
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.log__line--error {
+  color: var(--danger);
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}

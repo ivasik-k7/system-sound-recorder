@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost" />
+    <title>System Sound Recorder</title>
+    <!-- The application mark, inline. A data URI rather than a file so the
+         desktop shell has nothing to fetch, and so the browser stops asking
+         for a favicon that does not exist. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1.8' y='6' width='2.8' height='4' rx='1.4' fill='%2367717f'/%3E%3Crect x='6.6' y='2.2' width='2.8' height='11.6' rx='1.4' fill='%23e8545b'/%3E%3Crect x='11.4' y='4.8' width='2.8' height='6.4' rx='1.4' fill='%2367717f'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

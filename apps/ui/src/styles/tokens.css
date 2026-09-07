@@ -1,0 +1,330 @@
+/* Design tokens.
+ *
+ * The interface is dense and mostly dark, in the manner of a mixing desk, and
+ * it is meant to sit open on a second screen for hours. That last part decides
+ * most of what follows: nothing here is high contrast for its own sake,
+ * because a border that reads as crisp in a screenshot reads as noise after
+ * the fourth hour.
+ *
+ * Three things carry the softness. Surfaces are layered rather than outlined,
+ * so depth comes from a light and a shadow rather than from a line. Borders
+ * are translucent, so they sit at a fixed distance above whatever they are
+ * drawn on instead of jumping when a panel changes shade. And corners are
+ * generous, which is what keeps a window packed edge to edge with rectangles
+ * from looking like a spreadsheet.
+ */
+
+:root {
+  /* --- shape ------------------------------------------------------------ */
+  --r-xs: 5px;
+  --r-sm: 8px;
+  --r-md: 11px;
+  --r-lg: 15px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* --- motion ----------------------------------------------------------- */
+  /* One easing curve throughout: fast to leave, slow to settle. Mixing
+     curves is what makes an interface feel assembled rather than designed. */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast: 110ms;
+  --t-mid: 180ms;
+  --t-slow: 280ms;
+
+  /* --- type ------------------------------------------------------------- */
+  --font-ui: 'Segoe UI Variable Text', system-ui, -apple-system, 'Segoe UI',
+    Roboto, sans-serif;
+  --font-mono: 'Cascadia Mono', 'JetBrains Mono', 'SF Mono', Consolas,
+    'Liberation Mono', monospace;
+
+  --fs-1: 10px;
+  --fs-2: 11px;
+  --fs-3: 12px;
+  --fs-4: 13px;
+  --fs-5: 15px;
+  --fs-6: 18px;
+  --fs-7: 24px;
+
+  /* --- chrome heights --------------------------------------------------- */
+  --titlebar-height: 38px;
+  --commandbar-height: 62px;
+  --statusbar-height: 28px;
+
+  /* --- density ---------------------------------------------------------- */
+  /* Overridden by [data-density]. Panels are laid out in terms of these, so
+     one attribute on the root retunes the whole interface. */
+  --row-h: 32px;
+  --pad: 9px;
+  --pad-lg: 13px;
+  --gap: 8px;
+  --fs-body: 13px;
+}
+
+/* ------------------------------------------------------------------ themes --- */
+
+/* Dark, the default. A soft charcoal with a trace of blue in it rather than a
+   neutral grey, which keeps large flat areas from looking dead. */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-app: #0c0e12;
+  --bg-chrome: #12151b;
+  --bg-chrome-top: #161a21;
+  --bg-panel: #14181f;
+  --bg-raised: #1a1f28;
+  --bg-sunken: #0e1116;
+  --bg-hover: rgba(255, 255, 255, 0.045);
+  --bg-active: rgba(255, 255, 255, 0.08);
+  --bg-selected: rgba(91, 140, 255, 0.13);
+
+  /* Borders are translucent light, not a colour. A hairline then sits at the
+     same apparent distance above every surface it is drawn on. */
+  --border: rgba(255, 255, 255, 0.075);
+  --border-soft: rgba(255, 255, 255, 0.045);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  /* The highlight along the top edge of a raised surface, which is what makes
+     it read as lit from above rather than merely paler. */
+  --edge-light: rgba(255, 255, 255, 0.055);
+
+  --text: #e7ecf3;
+  --text-2: #98a3b3;
+  --text-3: #67717f;
+  --text-on-accent: #ffffff;
+
+  --accent: #5b8cff;
+  --accent-hover: #719bff;
+  --accent-soft: rgba(91, 140, 255, 0.16);
+  --accent-line: rgba(91, 140, 255, 0.45);
+
+  --record: #e8545b;
+  --record-hover: #ef6a70;
+  --record-soft: rgba(232, 84, 91, 0.16);
+  --record-glow: rgba(232, 84, 91, 0.35);
+
+  --ok: #3ecf8e;
+  --ok-soft: rgba(62, 207, 142, 0.15);
+  --warn: #f0b356;
+  --warn-soft: rgba(240, 179, 86, 0.15);
+  --danger: #f0666d;
+  --danger-soft: rgba(240, 102, 109, 0.15);
+
+  /* Meter colours. Four bands, not three: the difference between "loud" and
+     "clipped" is the one a recordist most needs to see instantly. */
+  --meter-low: #3ecf8e;
+  --meter-mid: #b8d94f;
+  --meter-high: #f0b356;
+  --meter-clip: #f0666d;
+  --meter-track: rgba(255, 255, 255, 0.05);
+  --meter-hold: rgba(255, 255, 255, 0.85);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 6px -1px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-3: 0 8px 24px -6px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-4: 0 20px 50px -12px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --ring: 0 0 0 3px rgba(91, 140, 255, 0.32);
+}
+
+/* Midnight: the same interface for a dark room. Deeper, cooler, lower
+   contrast between the panels and the space around them. */
+:root[data-theme='midnight'] {
+  color-scheme: dark;
+
+  --bg-app: #070911;
+  --bg-chrome: #0c1020;
+  --bg-chrome-top: #101527;
+  --bg-panel: #0e1322;
+  --bg-raised: #141a2c;
+  --bg-sunken: #080b14;
+  --bg-hover: rgba(255, 255, 255, 0.04);
+  --bg-active: rgba(255, 255, 255, 0.075);
+  --bg-selected: rgba(122, 148, 255, 0.14);
+
+  --border: rgba(160, 180, 255, 0.09);
+  --border-soft: rgba(160, 180, 255, 0.05);
+  --border-strong: rgba(160, 180, 255, 0.18);
+  --edge-light: rgba(180, 200, 255, 0.06);
+
+  --text: #e4e9f7;
+  --text-2: #93a0bd;
+  --text-3: #626d8a;
+}
+
+/* Light, for anyone who keeps their desktop bright. Warm paper rather than
+   white, and shadows carry the depth that the dark theme gets from borders. */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-app: #eceef3;
+  --bg-chrome: #f7f8fa;
+  --bg-chrome-top: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-raised: #f5f6f9;
+  --bg-sunken: #f0f2f6;
+  --bg-hover: rgba(16, 22, 38, 0.04);
+  --bg-active: rgba(16, 22, 38, 0.075);
+  --bg-selected: rgba(45, 105, 240, 0.1);
+
+  --border: rgba(16, 22, 38, 0.1);
+  --border-soft: rgba(16, 22, 38, 0.06);
+  --border-strong: rgba(16, 22, 38, 0.2);
+  --edge-light: rgba(255, 255, 255, 0.9);
+
+  --text: #171b23;
+  --text-2: #5b6472;
+  --text-3: #8a929e;
+
+  --accent: #2d69f0;
+  --accent-hover: #1f57d8;
+  --accent-soft: rgba(45, 105, 240, 0.11);
+  --accent-line: rgba(45, 105, 240, 0.45);
+
+  --record: #d9333c;
+  --record-hover: #c22730;
+  --record-soft: rgba(217, 51, 60, 0.11);
+  --record-glow: rgba(217, 51, 60, 0.25);
+
+  --ok: #16a06a;
+  --ok-soft: rgba(22, 160, 106, 0.12);
+  --warn: #b97a09;
+  --warn-soft: rgba(185, 122, 9, 0.13);
+  --danger: #d9333c;
+  --danger-soft: rgba(217, 51, 60, 0.12);
+
+  --meter-low: #16a06a;
+  --meter-mid: #8aa81f;
+  --meter-high: #d59122;
+  --meter-clip: #d9333c;
+  --meter-track: rgba(16, 22, 38, 0.07);
+  --meter-hold: rgba(16, 22, 38, 0.7);
+
+  --shadow-1: 0 1px 2px rgba(16, 22, 38, 0.06);
+  --shadow-2: 0 2px 6px -1px rgba(16, 22, 38, 0.1), 0 1px 2px rgba(16, 22, 38, 0.06);
+  --shadow-3: 0 8px 24px -6px rgba(16, 22, 38, 0.16), 0 2px 6px rgba(16, 22, 38, 0.08);
+  --shadow-4: 0 20px 50px -12px rgba(16, 22, 38, 0.24), 0 4px 12px rgba(16, 22, 38, 0.1);
+  --ring: 0 0 0 3px rgba(45, 105, 240, 0.28);
+}
+
+/* High contrast, for the people who need it rather than prefer it. Real
+   borders, no translucency, no gradients: the one place where the softness is
+   the wrong answer. */
+:root[data-theme='contrast'] {
+  color-scheme: dark;
+
+  --bg-app: #000000;
+  --bg-chrome: #000000;
+  --bg-chrome-top: #000000;
+  --bg-panel: #0a0a0a;
+  --bg-raised: #161616;
+  --bg-sunken: #000000;
+  --bg-hover: #262626;
+  --bg-active: #363636;
+  --bg-selected: #0a3a7a;
+
+  --border: #6a6a6a;
+  --border-soft: #4a4a4a;
+  --border-strong: #ffffff;
+  --edge-light: transparent;
+
+  --text: #ffffff;
+  --text-2: #dcdcdc;
+  --text-3: #b4b4b4;
+
+  --accent: #6aa8ff;
+  --accent-hover: #8fc0ff;
+  --accent-soft: #16305c;
+  --accent-line: #6aa8ff;
+
+  --record: #ff5a60;
+  --record-hover: #ff7c81;
+  --record-soft: #4a1114;
+  --record-glow: transparent;
+
+  --ok: #45e39b;
+  --ok-soft: #0c3d28;
+  --warn: #ffc861;
+  --warn-soft: #4a3508;
+  --danger: #ff6b72;
+  --danger-soft: #4a1114;
+
+  --meter-low: #45e39b;
+  --meter-mid: #d3f24f;
+  --meter-high: #ffc861;
+  --meter-clip: #ff6b72;
+  --meter-track: #262626;
+  --meter-hold: #ffffff;
+
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: none;
+  --shadow-4: none;
+  --ring: 0 0 0 3px #ffffff;
+}
+
+/* ----------------------------------------------------------------- accents --- */
+
+/* The accent is the one colour the user gets to choose. It is deliberately
+   not applied to anything load-bearing: record is always red and clipping is
+   always red, whatever the accent is set to, because those two colours mean
+   something and a preference must not be able to change what they mean. */
+:root[data-accent='violet'] {
+  --accent: #9d7bff;
+  --accent-hover: #ae91ff;
+  --accent-soft: rgba(157, 123, 255, 0.16);
+  --accent-line: rgba(157, 123, 255, 0.45);
+  --ring: 0 0 0 3px rgba(157, 123, 255, 0.32);
+  --bg-selected: rgba(157, 123, 255, 0.13);
+}
+
+:root[data-accent='teal'] {
+  --accent: #35c2c9;
+  --accent-hover: #4fd3d9;
+  --accent-soft: rgba(53, 194, 201, 0.16);
+  --accent-line: rgba(53, 194, 201, 0.45);
+  --ring: 0 0 0 3px rgba(53, 194, 201, 0.3);
+  --bg-selected: rgba(53, 194, 201, 0.13);
+}
+
+:root[data-accent='amber'] {
+  --accent: #e5a13c;
+  --accent-hover: #f0b357;
+  --accent-soft: rgba(229, 161, 60, 0.17);
+  --accent-line: rgba(229, 161, 60, 0.45);
+  --ring: 0 0 0 3px rgba(229, 161, 60, 0.3);
+  --bg-selected: rgba(229, 161, 60, 0.14);
+}
+
+:root[data-accent='rose'] {
+  --accent: #ec6a9c;
+  --accent-hover: #f284ad;
+  --accent-soft: rgba(236, 106, 156, 0.16);
+  --accent-line: rgba(236, 106, 156, 0.45);
+  --ring: 0 0 0 3px rgba(236, 106, 156, 0.3);
+  --bg-selected: rgba(236, 106, 156, 0.13);
+}
+
+/* ---------------------------------------------------------------- density --- */
+
+:root[data-density='compact'] {
+  --row-h: 26px;
+  --pad: 6px;
+  --pad-lg: 9px;
+  --gap: 6px;
+  --fs-body: 12px;
+  --titlebar-height: 32px;
+  --commandbar-height: 52px;
+  --statusbar-height: 24px;
+}
+
+:root[data-density='comfortable'] {
+  --row-h: 40px;
+  --pad: 12px;
+  --pad-lg: 18px;
+  --gap: 11px;
+  --fs-body: 14px;
+  --titlebar-height: 42px;
+  --commandbar-height: 70px;
+  --statusbar-height: 32px;
+}

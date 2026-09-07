@@ -1,0 +1,173 @@
+/* The docking skin.
+ *
+ * dockview provides the behaviour; this makes it look like the rest of the
+ * program. Two decisions matter. Groups are separated by the application
+ * background showing through rather than by borders, which is what makes a
+ * six-panel window look composed instead of gridded. And the drop targets are
+ * emphatic, because docking is a gesture people do not trust until they can
+ * see exactly where the panel is about to land.
+ */
+
+.dockview-theme-ssr {
+  --dv-background-color: var(--bg-app);
+  --dv-group-view-background-color: var(--bg-panel);
+
+  --dv-tabs-and-actions-container-background-color: var(--bg-chrome);
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-tabs-container-scrollbar-color: var(--border-strong);
+
+  --dv-activegroup-visiblepanel-tab-background-color: var(--bg-panel);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--bg-panel);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+
+  --dv-activegroup-visiblepanel-tab-color: var(--text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-3);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text-2);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-3);
+
+  --dv-separator-border: transparent;
+  --dv-paneview-header-border-color: var(--border);
+  --dv-tab-divider-color: transparent;
+  --dv-paneview-active-outline-color: var(--accent);
+
+  --dv-drag-over-background-color: var(--accent-soft);
+  --dv-drag-over-border-color: var(--accent);
+  --dv-active-sash-color: var(--accent);
+
+  --dv-floating-box-shadow: var(--shadow-4);
+  --dv-icon-hover-background-color: var(--bg-hover);
+}
+
+/* Each group is a rounded panel floating on the application background. The
+   gap between groups is the background, so a resize handle is empty space
+   rather than a line to be hunted for. */
+.dockview-theme-ssr .dv-groupview {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-2);
+}
+
+.dockview-theme-ssr .dv-view-container {
+  gap: 0;
+}
+
+/* The sash: invisible until it is under the pointer, then an accent line.
+   Wide enough to hit, narrow enough to read. */
+.dockview-theme-ssr .dv-sash {
+  background: transparent;
+  transition: background var(--t-mid) var(--ease);
+}
+
+.dockview-theme-ssr .dv-sash:hover,
+.dockview-theme-ssr .dv-sash.dv-active {
+  background: var(--accent-line);
+}
+
+/* --- tabs -------------------------------------------------------------- */
+
+.dockview-theme-ssr .dv-tabs-and-actions-container {
+  background: linear-gradient(var(--bg-chrome-top), var(--bg-chrome));
+  border-bottom: 1px solid var(--border);
+  padding: 0 4px;
+}
+
+.dockview-theme-ssr .dv-tab {
+  position: relative;
+  border-right: 0;
+  padding: 0 10px;
+  margin: 4px 1px 3px;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-3);
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.dockview-theme-ssr .dv-tab:hover {
+  background: var(--bg-hover);
+}
+
+/* The active tab carries an accent underline rather than a different
+   background, so a group of four tabs does not turn into four buttons. */
+.dockview-theme-ssr .dv-tab.dv-active-tab {
+  background: var(--bg-selected);
+  color: var(--text);
+}
+
+.dockview-theme-ssr .dv-tab.dv-active-tab::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: -3px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.dockview-theme-ssr .dv-default-tab {
+  padding: 0;
+  gap: 7px;
+}
+
+.dockview-theme-ssr .dv-default-tab-content {
+  padding: 0;
+  font-weight: 500;
+}
+
+.dockview-theme-ssr .dv-default-tab-action {
+  border-radius: var(--r-xs);
+  padding: 1px;
+}
+
+.dockview-theme-ssr .dv-default-tab-action:hover {
+  background: var(--bg-active);
+}
+
+/* --- header actions ---------------------------------------------------- */
+
+.dv-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  -webkit-app-region: no-drag;
+}
+
+/* --- floating groups --------------------------------------------------- */
+
+.dockview-theme-ssr .dv-resize-container {
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-4);
+  border: 1px solid var(--border-strong);
+}
+
+/* --- drop targets ------------------------------------------------------ */
+
+.dockview-theme-ssr .dv-drop-target-dropzone {
+  border-radius: var(--r-md);
+}
+
+.dockview-theme-ssr .dv-drop-target-selection {
+  border-radius: var(--r-sm);
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+  backdrop-filter: blur(1px);
+  transition:
+    top var(--t-fast) var(--ease),
+    left var(--t-fast) var(--ease),
+    width var(--t-fast) var(--ease),
+    height var(--t-fast) var(--ease);
+}
+
+/* --- watermark --------------------------------------------------------- */
+
+/* Shown when every panel has been closed. dockview's own is a bare icon; this
+   says what to do about it. */
+.dockview-theme-ssr .dv-watermark-container {
+  background: var(--bg-app);
+}

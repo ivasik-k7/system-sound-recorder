@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/ssr-core",
+  "crates/ssr-timeline",
+  "crates/ssr-session",
+  "crates/ssr-transcribe",
+  "crates/ssr-cli",
+]
+# The desktop app is a separate workspace: Tauri pins its own dependency set and
+# builds with the MSVC toolchain, while these crates cross-compile with mingw.
+exclude = ["apps/desktop"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+# Nothing here goes to crates.io: these crates refer to each other by path,
+# which a published crate cannot do.
+publish = false
+
+[workspace.dependencies]
+ssr-core = { path = "crates/ssr-core" }
+ssr-timeline = { path = "crates/ssr-timeline" }
+ssr-session = { path = "crates/ssr-session" }
+ssr-transcribe = { path = "crates/ssr-transcribe" }
+anyhow = "1"
+crossbeam-channel = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

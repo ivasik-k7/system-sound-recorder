@@ -1,0 +1,16 @@
+[package]
+name = "ssr-session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Recording session orchestration shared by the CLI and the desktop app."
+
+[dependencies]
+ssr-core.workspace = true
+ssr-timeline.workspace = true
+anyhow.workspace = true
+crossbeam-channel.workspace = true
+serde.workspace = true
+serde_json.workspace = true

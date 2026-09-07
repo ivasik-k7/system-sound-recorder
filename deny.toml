@@ -1,0 +1,82 @@
+# Dependency policy, enforced by cargo-deny in CI.
+#
+# Two questions this answers on every push. Is anything in the tree subject to a
+# published security advisory? And is every licence in the tree one this project
+# can actually ship under?
+#
+# The second question matters more than it usually does. This is an MIT product
+# that gets distributed as a signed installer to people who will not read a
+# dependency graph, so "we accidentally shipped something under the GPL" is a
+# problem discovered by a stranger rather than by us.
+#
+# The allow list below is not aspirational: it is the set of licences the tree
+# actually uses, verified against `cargo metadata`. Anything new has to be added
+# here deliberately, which is the point.
+
+[graph]
+# This is a Windows product. Evaluating the graph for Linux and macOS would pull
+# in dependencies that are never built, never shipped, and whose licences are
+# therefore not ours to worry about — and would make the allow list a fiction.
+targets = [
+  { triple = "x86_64-pc-windows-msvc" },
+  { triple = "x86_64-pc-windows-gnu" },
+]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "warn"
+# Only fail on an unmaintained crate this project actually chose. The tree
+# carries several unmaintained crates transitively through Tauri — the rust-unic
+# family, for instance — and there is nothing to do about them here except wait
+# for Tauri to move: they are unmaintained rather than vulnerable, and blocking
+# every push on someone else's dependency graph teaches people to ignore the
+# job. A genuine vulnerability is a different setting and still fails below.
+unmaintained = "workspace"
+# Nothing is ignored. When something has to be, it goes here with the advisory
+# id and a sentence saying why it does not apply, so the exception can be
+# reviewed later rather than inherited forever.
+ignore = []
+
+[licenses]
+version = 2
+# Every licence below is permissive, except MPL-2.0, which is noted separately.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  # File-level copyleft. Present through Tauri's CSS parsing crates
+  # (cssparser, selectors, dtoa-short) and dirs' option-ext. All are used
+  # unmodified, which is what keeps the obligation to publishing the notice in
+  # THIRD-PARTY-NOTICES.md rather than to publishing our own source.
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+# Below this confidence the licence text is not recognised well enough to be
+# trusted, and the build should stop and ask a person.
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+# A dependency pinned to "*" is a supply-chain hazard: it silently accepts
+# whatever is published next. The crates in this repository refer to each other
+# by path with no version, which Cargo represents as a wildcard and which is
+# not the same hazard at all, so those are exempt.
+wildcards = "deny"
+allow-wildcard-paths = true
+# Nothing is banned outright yet. A crate that should never appear — an audio
+# backend competing with WASAPI, say, or a telemetry client — belongs here.
+deny = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

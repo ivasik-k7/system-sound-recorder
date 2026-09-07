@@ -1,0 +1,360 @@
+/* The transcription mode: the conversation, and the dialog that saves it. */
+
+/* --------------------------------------------------------------- the chat --- */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px 18px;
+  /* Lines are read, and read text has to be selectable. */
+  user-select: text;
+}
+
+.chat-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0;
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* Consecutive lines from one voice run together, the way a chat groups a
+   burst of messages, so the eye is not asked to re-read the same name. */
+.chat-line--continued {
+  padding-top: 0;
+}
+
+.chat-line__who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+}
+
+.chat-line__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.chat-line__speaker {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.chat-line__time {
+  color: var(--text-3, #8b95a3);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+}
+
+.chat-line__text {
+  margin: 0;
+  /* Indented to line up under the speaker's name rather than under the dot. */
+  padding-left: 15px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text, #e7ebf0);
+  /* A measure of about eighty characters; longer lines are tiring to read and
+     a transcript is meant to be read. */
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+}
+
+.chat-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--text-2, #c8d0da);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-footer {
+  flex: none;
+  padding: 5px 12px;
+  border-top: 1px solid var(--border, #232a33);
+  font-size: 11px;
+  color: var(--text-3, #8b95a3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------- notices --- */
+
+.notice {
+  display: flex;
+  gap: 11px;
+  margin: 10px;
+  padding: 11px 13px;
+  border-radius: var(--radius, 6px);
+  border: 1px solid var(--border, #232a33);
+  background: var(--bg-raised, #1a1f26);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.notice p {
+  margin: 5px 0 9px;
+  color: var(--text-2, #c8d0da);
+  max-width: 60ch;
+}
+
+.notice--warn {
+  border-color: color-mix(in srgb, var(--warn, #f5a524) 40%, transparent);
+}
+
+.notice--error {
+  border-color: color-mix(in srgb, var(--danger, #e5484d) 45%, transparent);
+  color: var(--danger, #e5484d);
+}
+
+.notice--ok {
+  border-color: color-mix(in srgb, var(--ok, #30a46c) 40%, transparent);
+}
+
+.notice .code {
+  margin: 0 0 9px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-input, #0e1116);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  user-select: text;
+  color: var(--text-2, #c8d0da);
+}
+
+/* ------------------------------------------------------------ the dialog --- */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  animation: modal-fade 120ms ease;
+}
+
+.modal {
+  width: min(560px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel, #14181e);
+  border: 1px solid var(--border-strong, #323b47);
+  border-radius: 10px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  animation: modal-rise 140ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.modal__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border, #232a33);
+}
+
+.modal__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.modal__subtitle {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3, #8b95a3);
+}
+
+.modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.modal__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border, #232a33);
+  background: var(--bg-raised, #1a1f26);
+}
+
+.modal__files {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2, #c8d0da);
+}
+
+.field__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.field__row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------- format picker --- */
+
+.format-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 8px;
+}
+
+.format-tile {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  grid-template-areas:
+    'check name ext'
+    'check hint hint';
+  gap: 2px 7px;
+  padding: 9px 11px;
+  text-align: left;
+  background: var(--bg-input, #0e1116);
+  border: 1px solid var(--border, #232a33);
+  border-radius: var(--radius, 6px);
+  color: var(--text, #e7ebf0);
+  font: inherit;
+  cursor: default;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.format-tile:hover {
+  border-color: var(--border-strong, #323b47);
+  background: var(--bg-hover, #1f252e);
+}
+
+.format-tile--on {
+  border-color: var(--accent, #3d7eff);
+  background: color-mix(in srgb, var(--accent, #3d7eff) 12%, transparent);
+}
+
+.format-tile__check {
+  grid-area: check;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong, #323b47);
+  color: #fff;
+}
+
+.format-tile--on .format-tile__check {
+  background: var(--accent, #3d7eff);
+  border-color: var(--accent, #3d7eff);
+}
+
+.format-tile__name {
+  grid-area: name;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.format-tile__ext {
+  grid-area: ext;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3, #8b95a3);
+}
+
+.format-tile__hint {
+  grid-area: hint;
+  font-size: 10.5px;
+  color: var(--text-3, #8b95a3);
+  line-height: 1.35;
+}
+
+/* ------------------------------------------------------------ mode switch --- */
+
+.mode-switch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--bg-input, #0e1116);
+  border: 1px solid var(--border, #232a33);
+  border-radius: 7px;
+  flex: none;
+}
+
+.mode-switch__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3, #8b95a3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: default;
+  white-space: nowrap;
+  transition:
+    background 130ms ease,
+    color 130ms ease;
+}
+
+.mode-switch__option:hover:not(.mode-switch__option--on) {
+  color: var(--text, #e7ebf0);
+  background: var(--bg-hover, #1f252e);
+}
+
+.mode-switch__option--on {
+  background: var(--bg-active, #262d38);
+  color: var(--text, #e7ebf0);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-scrim,
+  .modal {
+    animation: none;
+  }
+  .chat {
+    scroll-behavior: auto;
+  }
+}

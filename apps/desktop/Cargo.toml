@@ -1,0 +1,54 @@
+[package]
+name = "ssr-desktop"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+description = "Desktop shell for the system sound recorder."
+default-run = "ssr-desktop"
+# Not a crates.io package: it depends on the engine crates by path.
+publish = false
+
+[lib]
+name = "ssr_desktop_lib"
+# Only rlib. The Tauri template also asks for staticlib and cdylib, which exist
+# for the mobile targets; on a desktop-only build they make the linker produce a
+# DLL as well, and mingw's ld gives up on its export table with "export ordinal
+# too large" in debug builds.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+crossbeam-channel = "0.5"
+
+ssr-core = { path = "../../crates/ssr-core" }
+ssr-session = { path = "../../crates/ssr-session" }
+ssr-timeline = { path = "../../crates/ssr-timeline" }
+ssr-transcribe = { path = "../../crates/ssr-transcribe" }
+
+# Asking Windows directly what the display scale is; the window reports the
+# wrong answer, which is what apply_scale_correction exists to work around.
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62"
+features = ["Win32_Foundation", "Win32_UI_HiDpi"]
+
+[features]
+# Used by `tauri build --features custom-protocol`.
+custom-protocol = ["tauri/custom-protocol"]
+# Keeps a console attached to a release build so startup failures are visible.
+console = []
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

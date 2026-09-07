@@ -1,0 +1,451 @@
+/* The window's own furniture: title bar, transport, status bar, palette. */
+
+/* ------------------------------------------------------------- titlebar --- */
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 12px;
+  background: linear-gradient(var(--bg-chrome-top), var(--bg-chrome));
+  border-bottom: 1px solid var(--border);
+  /* Everything except the controls drags the window. */
+  -webkit-app-region: drag;
+  min-width: 0;
+}
+
+.titlebar__mark {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.titlebar__title {
+  font-size: var(--fs-3);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  flex: none;
+}
+
+.titlebar__subtitle {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar__menus {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__spacer {
+  flex: 1;
+  min-width: 8px;
+  align-self: stretch;
+}
+
+.titlebar__controls {
+  display: flex;
+  flex: none;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__button {
+  width: 46px;
+  height: var(--titlebar-height);
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-2);
+  cursor: default;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.titlebar__button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.titlebar__button--close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* --------------------------------------------------------- command bar --- */
+
+.commandbar {
+  display: flex;
+  align-items: center;
+  gap: var(--pad-lg);
+  padding: 0 var(--pad-lg);
+  background: linear-gradient(var(--bg-chrome), var(--bg-chrome-top));
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.commandbar__group {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  flex: none;
+}
+
+.commandbar__divider {
+  width: 1px;
+  height: 30px;
+  flex: none;
+  background: var(--border);
+}
+
+/* The clock. Large, monospaced, and red while it is running: the single
+   piece of information the whole window exists to report. */
+.clock {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-7);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-2);
+  min-width: 132px;
+  transition: color var(--t-mid) var(--ease);
+}
+
+.clock--live {
+  color: var(--record);
+}
+
+.clock__frac {
+  font-size: var(--fs-5);
+  opacity: 0.65;
+}
+
+.commandbar__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: none;
+  font-size: var(--fs-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.commandbar__meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.commandbar__spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The path button. Wide, truncating, and the whole thing is the target,
+   because opening the output folder is the most common thing anyone does
+   after stopping a recording. */
+.pathbutton {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  max-width: 260px;
+  padding: 0 11px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  cursor: default;
+  min-width: 0;
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.pathbutton:hover {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.pathbutton__path {
+  font-family: var(--font-mono);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------- status bar --- */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--pad-lg);
+  padding: 0 var(--pad-lg);
+  background: linear-gradient(var(--bg-chrome-top), var(--bg-chrome));
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-2);
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statusbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  white-space: nowrap;
+}
+
+.statusbar__item--button {
+  height: 20px;
+  padding: 0 7px;
+  margin: 0 -4px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-xs);
+  color: inherit;
+  font: inherit;
+  cursor: default;
+  transition: background var(--t-fast) var(--ease);
+}
+
+.statusbar__item--button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.statusbar__item--warn {
+  color: var(--warn);
+}
+
+.statusbar__item--danger {
+  color: var(--danger);
+}
+
+.statusbar__last {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  text-align: right;
+}
+
+/* ------------------------------------------------------ command palette --- */
+
+.palette {
+  width: min(620px, calc(100vw - 48px));
+  background: var(--bg-chrome-top);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-4);
+  overflow: hidden;
+  animation: rise var(--t-slow) var(--ease-out);
+}
+
+.palette__input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-5);
+}
+
+.palette__input::placeholder {
+  color: var(--text-3);
+}
+
+.palette__list {
+  max-height: min(56vh, 420px);
+  overflow: auto;
+  padding: 6px;
+}
+
+.palette__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-4);
+  text-align: left;
+  cursor: default;
+}
+
+.palette__item[data-active='true'] {
+  background: var(--bg-selected);
+}
+
+.palette__item:disabled {
+  opacity: 0.4;
+}
+
+.palette__icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-xs);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  color: var(--text-2);
+}
+
+.palette__body {
+  /* A column, or the title and the detail render as one run of text and
+     neither of them can be truncated. */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.palette__title,
+.palette__sub {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette__sub {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+}
+
+.palette__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--pad-lg);
+  padding: 7px 14px;
+  background: var(--bg-chrome);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-2);
+  color: var(--text-3);
+}
+
+.palette__group {
+  padding: 8px 10px 4px;
+  font-size: var(--fs-1);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ------------------------------------------------------ layout gallery --- */
+
+/* Layout presets are chosen by their shape, not their name, so the menu
+   shows the shape. A drawn schematic is worth more than "Console" is. */
+.layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding: 5px;
+}
+
+.layout-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-align: left;
+  cursor: default;
+  transition:
+    border-color var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease);
+}
+
+.layout-card:hover {
+  border-color: var(--accent-line);
+  background: var(--bg-active);
+}
+
+.layout-card[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.layout-card__sketch {
+  display: grid;
+  gap: 2px;
+  height: 46px;
+  padding: 3px;
+  background: var(--bg-sunken);
+  border-radius: var(--r-xs);
+}
+
+.layout-card__cell {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.layout-card__cell--accent {
+  background: var(--accent-line);
+}
+
+.layout-card__name {
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+.layout-card__desc {
+  font-size: var(--fs-1);
+  color: var(--text-3);
+  line-height: 1.4;
+  /* Clamped so the cards in the gallery are the same height. A ragged grid
+     of six is harder to compare than six equal rectangles, and comparing
+     them is the whole point of showing the shapes. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------ shortcut sheet --- */
+
+.shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--pad-lg);
+}
+
+.shortcuts__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--fs-3);
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the recorder's own windows. Deliberately narrow: the interface only needs to drive its own windows and open the output folder.",
+  "windows": ["main", "panel-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-always-on-top",
+    "core:webview:allow-create-webview-window",
+    "dialog:allow-open",
+    "opener:default"
+  ]
+}

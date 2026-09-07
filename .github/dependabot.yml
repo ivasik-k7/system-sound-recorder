@@ -1,0 +1,59 @@
+# Dependency updates.
+#
+# Grouped, because this project has three dependency sets and a pull request
+# per crate would bury everything else. Weekly rather than daily: none of this
+# is urgent, and Audit already watches for advisories.
+
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      engine:
+        patterns: ['*']
+
+  # A separate workspace, so a separate entry.
+  - package-ecosystem: cargo
+    directory: /apps/desktop
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      desktop:
+        patterns: ['*']
+    ignore:
+      # Tauri's own major versions change the configuration format and the
+      # capability model. That is a deliberate migration, not a bump.
+      - dependency-name: tauri
+        update-types: [version-update:semver-major]
+      - dependency-name: tauri-build
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      interface:
+        patterns: ['*']
+    ignore:
+      # React majors are a migration too.
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

@@ -1,0 +1,233 @@
+# Continuous integration.
+#
+# Two facts about this project decide the shape of this file.
+#
+# The engine is Windows-only: every crate is `#![cfg(windows)]`, so on a Linux
+# runner it compiles to an empty library and the tests would pass without
+# testing anything. Anything that has to actually run — the tests, clippy over
+# real code — runs on Windows.
+#
+# And both `.cargo/config.toml` files pin `x86_64-pc-windows-gnu` with absolute
+# paths to a mingw toolchain in one developer's home directory, because that is
+# what makes the documented WSL workflow work. Those settings are wrong
+# everywhere else, so the Windows jobs override the target with
+# CARGO_BUILD_TARGET and the Linux cross job overrides the linker with
+# CARGO_TARGET_*_LINKER. Environment variables beat config files in Cargo, which
+# is the whole reason this is possible without editing the committed config.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch makes the first one's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Slimmer, faster caches: nothing here needs to be debugged from CI.
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: read
+
+jobs:
+  # Cheap and first, because a version mismatch invalidates a release and the
+  # answer takes a second.
+  versions:
+    name: Versions agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/check-versions.sh
+
+  format:
+    name: Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Engine workspace
+        run: cargo fmt --all -- --check
+      - name: Desktop workspace
+        working-directory: apps/desktop
+        run: cargo fmt --all -- --check
+
+  engine:
+    name: Engine (Windows)
+    runs-on: windows-latest
+    env:
+      # Overrides `[build] target` in .cargo/config.toml, which points at the
+      # mingw target used for cross-compiling from WSL.
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            apps/desktop -> target
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace
+      - name: Clippy, desktop shell
+        working-directory: apps/desktop
+        run: cargo clippy --all-targets -- -D warnings
+
+  interface:
+    name: Interface
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run ui:typecheck
+      - name: Build
+        run: npm run ui:build
+      # Not consumed by another job: it is here so a reviewer can download a
+      # pull request's built interface and open it, simulator and all.
+      - name: Keep the built interface for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: interface-dist
+          path: apps/ui/dist
+          retention-days: 7
+
+  # The desktop shell embeds the built interface, so this proves the whole
+  # front end compiles together. It does not bundle an installer; that is
+  # release.yml's job and it costs several minutes.
+  desktop:
+    name: Desktop shell (Windows)
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop -> target
+      - run: npm ci
+      - name: Build the interface
+        run: npm run ui:build
+      - name: Build the shell
+        working-directory: apps/desktop
+        # custom-protocol is not optional: without it Tauri stays in
+        # development mode and the window tries to load the dev server.
+        run: cargo build --features custom-protocol
+
+  # The documented development path is cross-compiling from WSL with mingw.
+  # Nothing else exercises it, so it would rot silently.
+  cross:
+    name: Cross-compile from Linux
+    runs-on: ubuntu-latest
+    env:
+      # The committed config names a mingw installation in a home directory
+      # that does not exist here. These override it for this target only.
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: /usr/bin/x86_64-w64-mingw32-gcc
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS: -Cdlltool=/usr/bin/x86_64-w64-mingw32-dlltool -Clink-arg=-static-libgcc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+      - name: Install mingw-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-x86-64
+      - name: Build the command line recorder
+        run: cargo build --release --bin ssr
+      - name: It should be a Windows executable
+        run: file target/x86_64-pc-windows-gnu/release/ssr.exe | tee /dev/stderr | grep -q "PE32+"
+
+  # The declared minimums, which are what `rust-version` in each Cargo.toml
+  # promises. They differ: the engine is held at 1.85 by clap wanting edition
+  # 2024, and the desktop shell at 1.88 by the bundler's dependencies. Both were
+  # wrong before this job existed, which is the argument for having it.
+  msrv:
+    name: Minimum Rust (${{ matrix.name }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: engine 1.85
+            toolchain: '1.85'
+            directory: .
+          - name: desktop 1.88
+            toolchain: '1.88'
+            directory: apps/desktop
+    env:
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv-${{ matrix.toolchain }}
+          workspaces: ${{ matrix.directory }} -> target
+      # The desktop shell's build script needs the interface to exist before it
+      # will configure, so this is not optional even for a check.
+      - run: npm ci
+      - run: npm run ui:build
+      - name: Check
+        working-directory: ${{ matrix.directory }}
+        run: cargo check --all-targets
+
+  dependencies:
+    name: Licences and advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: Engine workspace
+        run: cargo deny --all-features check
+      - name: Desktop workspace
+        run: cargo deny --all-features --manifest-path apps/desktop/Cargo.toml check
+
+  # One job to require in branch protection, so the list of jobs can change
+  # without the setting having to be edited.
+  ci:
+    name: CI
+    if: always()
+    needs: [versions, format, engine, interface, desktop, cross, msrv, dependencies]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if anything above failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "All checks passed."

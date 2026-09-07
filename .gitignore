@@ -1,0 +1,28 @@
+# Rust
+/target
+/apps/desktop/target
+/apps/desktop/gen
+
+# Assembled by scripts/build-desktop.sh
+/dist
+
+# Node
+node_modules/
+/apps/ui/dist
+
+# Recordings never belong in the repository: they are large and they contain
+# whatever the machine happened to be playing.
+/recordings
+*.wav
+*.flac
+
+# Transcripts are worse: they are small, they look harmless, and they are the
+# searchable content of a conversation.
+/transcripts
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
