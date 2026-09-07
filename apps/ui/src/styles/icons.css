@@ -1,0 +1,194 @@
+/* Icons.
+ *
+ * One place that decides how large an icon is, what colour it takes, and how it
+ * responds to being hovered or pressed. Sizes are tokens rather than numbers so
+ * that a row of icons matches without anyone counting pixels, and the tones are
+ * meanings rather than colours, so "recording" is the same red everywhere.
+ */
+
+:root {
+  --icon-xs: 13px;
+  --icon-sm: 15px;
+  --icon-md: 17px;
+  --icon-lg: 20px;
+  --icon-xl: 26px;
+
+  /* Icons sit slightly brighter than the text beside them. A glyph is a much
+     thinner shape than a letterform, so matching the text colour exactly makes
+     it read as fainter than the label it belongs to. */
+  --icon-color: var(--text-2, #c8d0da);
+  --icon-color-strong: var(--text, #e7ebf0);
+}
+
+.icon {
+  display: block;
+  flex: none;
+  /* Glows are drawn outside the box; without this they are clipped. */
+  overflow: visible;
+  color: var(--icon-color);
+  transition:
+    color 120ms ease,
+    filter 120ms ease,
+    transform 120ms ease;
+}
+
+/* --- tones ---------------------------------------------------------------- */
+
+.icon--muted {
+  color: var(--text-3, #8b95a3);
+}
+
+.icon--accent {
+  color: var(--accent, #3d7eff);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--accent, #3d7eff) 45%, transparent));
+}
+
+.icon--record {
+  color: var(--record, #e5484d);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--record, #e5484d) 55%, transparent));
+}
+
+.icon--ok {
+  color: var(--ok, #30a46c);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ok, #30a46c) 40%, transparent));
+}
+
+.icon--warn {
+  color: var(--warn, #f5a524);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--warn, #f5a524) 40%, transparent));
+}
+
+.icon--danger {
+  color: var(--danger, #e5484d);
+}
+
+/* --- behaviour in context ------------------------------------------------- */
+
+/* Inside a control the icon takes the control's colour, so a primary button's
+   white label and its icon do not disagree. */
+.btn .icon,
+.tab .icon,
+.menu-item .icon {
+  color: inherit;
+}
+
+/* Except when the icon carries a meaning of its own, which outranks context. */
+.btn .icon--record,
+.btn .icon--ok,
+.btn .icon--warn,
+.btn .icon--accent {
+  color: currentColor;
+}
+
+.btn--record .icon,
+.btn--stop .icon {
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.35));
+}
+
+/* A press should be felt. Two pixels of travel is enough to register without
+   making a toolbar look loose. */
+.btn:not(:disabled):hover .icon {
+  color: var(--icon-color-strong);
+  transform: translateY(-0.5px);
+}
+
+.btn:not(:disabled):active .icon {
+  transform: translateY(0.5px);
+}
+
+.btn:disabled .icon {
+  opacity: 0.45;
+  filter: none;
+}
+
+/* --- standalone treatments ------------------------------------------------ */
+
+/* An icon that stands alone in a list needs a little more presence than one
+   sitting next to a label. */
+.icon--lead {
+  color: var(--icon-color-strong);
+}
+
+/* A circular ground behind an icon, for a list where each row is a thing
+   rather than an action. */
+.icon-chip {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--bg-raised, #1a1f26);
+  border: 1px solid var(--border, #232a33);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.icon-chip--accent {
+  background: color-mix(in srgb, var(--accent, #3d7eff) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent, #3d7eff) 40%, transparent);
+}
+
+.icon-chip--record {
+  background: color-mix(in srgb, var(--record, #e5484d) 16%, transparent);
+  border-color: color-mix(in srgb, var(--record, #e5484d) 40%, transparent);
+}
+
+/* The recording indicator, which should draw the eye without being a strobe. */
+.icon--pulse {
+  animation: icon-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes icon-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--record, #e5484d) 60%, transparent));
+  }
+  50% {
+    opacity: 0.55;
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--record, #e5484d) 25%, transparent));
+  }
+}
+
+.app-mark {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+
+/* A spinner for work that takes long enough to need one, such as recognising
+   speech in a long track. */
+.icon--spin {
+  animation: icon-spin 900ms linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon,
+  .icon--pulse,
+  .icon--spin {
+    transition: none;
+    animation: none;
+  }
+  .btn:not(:disabled):hover .icon,
+  .btn:not(:disabled):active .icon {
+    transform: none;
+  }
+}
+
+/* Light theme: the glows have to be weaker, or coloured icons look smudged
+   against a white ground. */
+:root[data-theme='light'] .icon--accent,
+:root[data-theme='light'] .icon--record,
+:root[data-theme='light'] .icon--ok,
+:root[data-theme='light'] .icon--warn {
+  filter: none;
+}
+
+:root[data-theme='light'] {
+  --icon-color: var(--text-2, #47505c);
+  --icon-color-strong: var(--text, #14181e);
+}

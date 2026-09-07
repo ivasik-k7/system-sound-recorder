@@ -1,0 +1,23 @@
+[package]
+name = "ssr-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ssr"
+path = "src/main.rs"
+
+[dependencies]
+ssr-core.workspace = true
+ssr-timeline.workspace = true
+ssr-session.workspace = true
+ssr-transcribe.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+ctrlc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+crossbeam-channel.workspace = true

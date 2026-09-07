@@ -1,0 +1,223 @@
+# Releases.
+#
+# Pushing a tag like v0.2.0 builds everything, checks that the tag agrees with
+# what the source says its version is, and publishes a GitHub Release with the
+# artifacts attached.
+#
+# This is also the only way the project produces installers. The local script,
+# scripts/build-desktop.sh, cross-compiles the executable from WSL but says so
+# plainly: bundling an MSI or an NSIS setup needs the Windows tooling. A Windows
+# runner has it, so the installers exist here and nowhere else.
+#
+# Running it by hand (workflow_dispatch) builds and uploads the artifacts to the
+# run without publishing anything, which is how to test a change to this file
+# without inventing a tag.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+permissions:
+  contents: read
+
+jobs:
+  # Nothing is built until the tag and the source agree. A release whose
+  # installer disagrees with the binary inside it is worse than no release.
+  guard:
+    name: Check the version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      publish: ${{ steps.read.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          version="$(grep -m1 -E '^version[[:space:]]*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            ./scripts/check-versions.sh "${{ github.ref_name }}"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            ./scripts/check-versions.sh
+          fi
+
+  cli:
+    name: Command line recorder
+    needs: guard
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --bin ssr
+
+      - name: Assemble the archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="ssr-${{ needs.guard.outputs.version }}-x86_64-pc-windows-msvc"
+          mkdir -p "staging/$name"
+          cp target/x86_64-pc-windows-msvc/release/ssr.exe "staging/$name/"
+          # The legal notice travels with the binary. Someone who unzips this
+          # onto a machine and starts recording calls should not have to go
+          # back to the repository to find out what that means.
+          cp README.md LICENSE LEGAL.md PRIVACY.md THIRD-PARTY-NOTICES.md "staging/$name/"
+          cd staging && 7z a -mx=9 "../$name.zip" "$name" >/dev/null
+          cd .. && ls -lh "$name.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli
+          path: '*.zip'
+          if-no-files-found: error
+
+  desktop:
+    name: Desktop installers
+    needs: guard
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop -> target
+      - run: npm ci
+
+      - name: Install the Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      # tauri build runs the interface build itself, through
+      # beforeBuildCommand in tauri.conf.json.
+      - name: Build and bundle
+        working-directory: apps/desktop
+        run: tauri build --features custom-protocol --target x86_64-pc-windows-msvc
+
+      - name: Collect the installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.guard.outputs.version }}"
+          bundle="apps/desktop/target/x86_64-pc-windows-msvc/release/bundle"
+          mkdir -p staging
+          # Named so the version is visible in a downloads folder, which is
+          # where these end up.
+          for f in "$bundle"/msi/*.msi; do
+            [ -e "$f" ] || continue
+            cp "$f" "staging/System-Sound-Recorder-$version-x64.msi"
+          done
+          for f in "$bundle"/nsis/*-setup.exe; do
+            [ -e "$f" ] || continue
+            cp "$f" "staging/System-Sound-Recorder-$version-setup.exe"
+          done
+          ls -lh staging
+          # An empty staging directory means the bundle step quietly produced
+          # nothing, which must not look like success.
+          test -n "$(ls -A staging)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: staging/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: [guard, cli, desktop]
+    if: needs.guard.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # To create the release and attach files to it.
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: artifacts
+        run: |
+          set -euo pipefail
+          ls -lh
+          # Listed explicitly rather than with a glob, so the checksum file
+          # cannot end up describing itself depending on expansion order.
+          mapfile -t files < <(find . -maxdepth 1 -type f -printf '%f\n' | sort)
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Release notes
+        id: notes
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          # The section of the changelog for this version, if there is one.
+          # Falls back to a pointer rather than inventing a summary.
+          if awk -v v="$VERSION" '
+                $0 ~ "^## \\[?"v"\\]?" {found=1; next}
+                found && /^## / {exit}
+                found {print}
+              ' CHANGELOG.md > body.md && [ -s body.md ]; then
+            echo "Using the changelog entry for $VERSION."
+          else
+            echo "See CHANGELOG.md for what changed." > body.md
+          fi
+          {
+            echo
+            echo "### Which download"
+            echo
+            echo "| File | For |"
+            echo "|---|---|"
+            echo "| \`System-Sound-Recorder-$VERSION-setup.exe\` | Most people. Installs the desktop application. |"
+            echo "| \`System-Sound-Recorder-$VERSION-x64.msi\` | Deployment through group policy or Intune. |"
+            echo "| \`ssr-$VERSION-x86_64-pc-windows-msvc.zip\` | The command line recorder on its own. |"
+            echo
+            echo "Verify a download against \`SHA256SUMS.txt\`."
+            echo
+            echo "Recording other people needs their knowledge and often their consent."
+            echo "[LEGAL.md](LEGAL.md) explains what to check before pointing this at a meeting."
+          } >> body.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          # A pre-1.0 version is marked as a pre-release, because it is one.
+          prerelease=""
+          case "$VERSION" in
+            0.*|*-*) prerelease="--prerelease" ;;
+          esac
+          gh release create "${{ github.ref_name }}" \
+            --title "System Sound Recorder $VERSION" \
+            --notes-file body.md \
+            --verify-tag \
+            $prerelease \
+            artifacts/*

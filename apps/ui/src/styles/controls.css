@@ -1,0 +1,721 @@
+/* Buttons, fields and the small interactive pieces.
+ *
+ * Every control is built the same way: a translucent border, a surface that is
+ * a shade of the background rather than a colour of its own, and a light along
+ * the top edge. That is what makes a button on a panel and a button on the
+ * title bar look like the same button rather than two similar ones.
+ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  background: var(--bg-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-3);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+  box-shadow: inset 0 1px 0 var(--edge-light), var(--shadow-1);
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-active);
+  border-color: var(--border-strong);
+}
+
+.btn:active:not(:disabled) {
+  /* A single pixel, which is enough to feel and not enough to reflow. */
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: transparent;
+}
+
+.btn--accent-quiet {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.btn--accent-quiet:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+  box-shadow: none;
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.btn--danger-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+  box-shadow: none;
+}
+
+.btn--danger-ghost:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: transparent;
+}
+
+.btn--icon {
+  width: 30px;
+  padding: 0;
+  flex: none;
+}
+
+.btn--sm {
+  height: 24px;
+  padding: 0 9px;
+  font-size: var(--fs-2);
+  border-radius: var(--r-xs);
+}
+
+.btn--sm.btn--icon {
+  width: 24px;
+}
+
+.btn--lg {
+  height: 36px;
+  padding: 0 16px;
+  font-size: var(--fs-4);
+  border-radius: var(--r-md);
+}
+
+/* --- transport --------------------------------------------------------- */
+
+/* The one control that is allowed to be loud. It carries a glow rather than a
+   heavier border, because it has to be findable at a glance from across a desk
+   and a border cannot do that. */
+.btn--record {
+  height: 38px;
+  padding: 0 20px;
+  background: var(--record);
+  border-color: transparent;
+  color: #fff;
+  font-size: var(--fs-4);
+  font-weight: 600;
+  border-radius: var(--r-md);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 14px -2px var(--record-glow);
+}
+
+.btn--record:hover:not(:disabled) {
+  background: var(--record-hover);
+  border-color: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 3px 20px -2px var(--record-glow);
+}
+
+.btn--stop {
+  height: 38px;
+  padding: 0 20px;
+  background: var(--record-soft);
+  border-color: var(--record);
+  color: var(--record);
+  font-size: var(--fs-4);
+  font-weight: 600;
+  border-radius: var(--r-md);
+  box-shadow: none;
+}
+
+.btn--stop:hover:not(:disabled) {
+  background: var(--record);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* --- fields ------------------------------------------------------------ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: var(--fs-2);
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.field__hint {
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.input,
+.select {
+  height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-3);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+  transition:
+    border-color var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease);
+}
+
+.select {
+  /* Room for the native arrow, which is left in place: replacing it means
+     replacing the whole menu, and the native one is better than a copy. */
+  padding-right: 6px;
+  cursor: default;
+}
+
+.input:hover,
+.select:hover {
+  border-color: var(--border-strong);
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.input::placeholder {
+  color: var(--text-3);
+}
+
+.input--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-3);
+}
+
+.input--sm {
+  height: 24px;
+  padding: 0 7px;
+  font-size: var(--fs-2);
+}
+
+.input--search {
+  padding-left: 30px;
+  background-image: none;
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.search__icon {
+  position: absolute;
+  left: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.search .input {
+  width: 100%;
+}
+
+/* --- switch ------------------------------------------------------------ */
+
+/* A real switch rather than a checkbox, because half of these are settings
+   that take effect immediately and a switch is the shape that says so. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--fs-3);
+  color: var(--text-2);
+  cursor: default;
+  min-width: 0;
+}
+
+.switch__track {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  flex: none;
+  background: var(--meter-track);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  transition:
+    background var(--t-mid) var(--ease),
+    border-color var(--t-mid) var(--ease);
+}
+
+.switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-2);
+  border-radius: 50%;
+  box-shadow: var(--shadow-1);
+  transition:
+    transform var(--t-mid) var(--ease-out),
+    background var(--t-mid) var(--ease);
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch input:checked + .switch__track {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.switch input:checked + .switch__track .switch__thumb {
+  transform: translateX(14px);
+  background: #fff;
+}
+
+.switch input:focus-visible + .switch__track {
+  box-shadow: var(--ring);
+}
+
+.switch input:disabled + .switch__track {
+  opacity: 0.4;
+}
+
+.switch--on {
+  color: var(--text);
+}
+
+/* --- segmented control ------------------------------------------------- */
+
+/* Never stretched by a flex column: a segmented control's width is the sum of
+   its options, and a full-width one leaves an empty strip pretending to be a
+   choice. */
+.segmented {
+  align-self: flex-start;
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  gap: 2px;
+}
+
+.segmented__option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-xs);
+  color: var(--text-2);
+  font-size: var(--fs-2);
+  font-weight: 500;
+  cursor: default;
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.segmented__option:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.segmented__option[aria-pressed='true'] {
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 var(--edge-light), var(--shadow-1);
+}
+
+.segmented__option:disabled {
+  opacity: 0.4;
+}
+
+/* --- range ------------------------------------------------------------- */
+
+/* Sliders are the one control here with real native machinery worth keeping,
+   so only the track and the thumb are restyled. */
+input[type='range'].input {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  cursor: default;
+}
+
+input[type='range'].input:focus {
+  box-shadow: none;
+}
+
+input[type='range'].input:focus-visible {
+  box-shadow: var(--ring);
+}
+
+input[type='range'].input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--meter-track);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+input[type='range'].input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--shadow-2);
+}
+
+input[type='range'].input:hover::-webkit-slider-thumb {
+  background: var(--accent-hover);
+}
+
+input[type='range'].input::-moz-range-track {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--meter-track);
+}
+
+input[type='range'].input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* --- swatches ---------------------------------------------------------- */
+
+.swatches {
+  display: flex;
+  gap: 7px;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background-clip: content-box;
+  cursor: default;
+  transition:
+    border-color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+.swatch:hover {
+  transform: scale(1.1);
+}
+
+.swatch[aria-pressed='true'] {
+  border-color: var(--text);
+}
+
+/* --- menus and popovers ------------------------------------------------ */
+
+.popover {
+  position: absolute;
+  z-index: 60;
+  min-width: 210px;
+  max-height: min(72vh, 620px);
+  overflow: auto;
+  padding: 5px;
+  background: var(--bg-chrome-top);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-4);
+  animation: pop var(--t-mid) var(--ease-out);
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+}
+
+.popover--wide {
+  min-width: 380px;
+}
+
+.popover__label {
+  padding: 7px 9px 4px;
+  font-size: var(--fs-1);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.popover__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-soft);
+}
+
+.menuitem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-3);
+  text-align: left;
+  cursor: default;
+  transition: background var(--t-fast) var(--ease);
+}
+
+.menuitem:hover:not(:disabled),
+.menuitem[data-active='true'] {
+  background: var(--bg-hover);
+}
+
+.menuitem:disabled {
+  opacity: 0.4;
+}
+
+.menuitem__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.menuitem__title {
+  display: block;
+}
+
+.menuitem__sub {
+  display: block;
+  font-size: var(--fs-2);
+  color: var(--text-3);
+  line-height: 1.35;
+}
+
+.menuitem__check {
+  width: 14px;
+  flex: none;
+  color: var(--accent);
+}
+
+.menuitem--current {
+  background: var(--bg-selected);
+}
+
+/* --- keyboard hints ---------------------------------------------------- */
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 19px;
+  padding: 0 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: var(--r-xs);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  color: var(--text-2);
+  white-space: nowrap;
+  flex: none;
+}
+
+.kbd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* --- dialogs ----------------------------------------------------------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: start center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  animation: fade var(--t-mid) var(--ease);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.dialog {
+  width: min(460px, calc(100vw - 48px));
+  padding: var(--pad-lg);
+  background: var(--bg-chrome-top);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-4);
+  animation: rise var(--t-slow) var(--ease-out);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+.dialog__title {
+  font-size: var(--fs-5);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  margin: var(--pad) 0 var(--pad-lg);
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gap);
+}
+
+/* --- toasts ------------------------------------------------------------ */
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--statusbar-height) + 14px);
+  z-index: 100;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 9px;
+  width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-chrome-top);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-3);
+  pointer-events: auto;
+  animation: slide-in var(--t-slow) var(--ease-out);
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+.toast--warn {
+  border-left-color: var(--warn);
+}
+
+.toast--error {
+  border-left-color: var(--danger);
+}
+
+.toast--ok {
+  border-left-color: var(--ok);
+}
+
+.toast__icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.toast--warn .toast__icon {
+  color: var(--warn);
+}
+
+.toast--error .toast__icon {
+  color: var(--danger);
+}
+
+.toast--ok .toast__icon {
+  color: var(--ok);
+}
+
+.toast__body {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-3);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.toast__title {
+  font-weight: 600;
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ivasik-k7/system-sound-recorder/security/advisories/new
+    about: Report privately instead. Please do not open a public issue for anything that lets someone record audio they should not be able to.
+  - name: Is this legal where I am?
+    url: https://github.com/ivasik-k7/system-sound-recorder/blob/main/LEGAL.md
+    about: What to check before recording a meeting. Not legal advice, but it says which questions matter.

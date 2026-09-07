@@ -1,0 +1,20 @@
+# Cross-compilation from WSL/Linux to Windows via mingw-w64.
+#
+# The toolchain is installed user-locally (no root) by
+# scripts/bootstrap-toolchain.sh. Absolute paths are used so that neither PATH
+# nor a login shell has to be set up first; adjust them if you relocate it.
+
+[build]
+target = "x86_64-pc-windows-gnu"
+
+[target.x86_64-pc-windows-gnu]
+linker = "/home/ivan/.local/mingw-w64/usr/bin/x86_64-w64-mingw32-gcc"
+ar = "/home/ivan/.local/mingw-w64/usr/bin/x86_64-w64-mingw32-ar"
+rustflags = [
+  # windows-sys and friends generate import libraries at build time and shell
+  # out to dlltool to do it.
+  "-Cdlltool=/home/ivan/.local/mingw-w64/usr/bin/x86_64-w64-mingw32-dlltool",
+  # Avoid a runtime dependency on libgcc_s_seh-1.dll, so the built binary is a
+  # single file that can be copied anywhere on the host.
+  "-Clink-arg=-static-libgcc",
+]

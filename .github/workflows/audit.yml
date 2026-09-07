@@ -1,0 +1,44 @@
+# A weekly look at the dependencies.
+#
+# CI already runs cargo-deny on every push, but an advisory published next
+# Tuesday does not push anything. This is the job that notices.
+
+name: Audit
+
+on:
+  schedule:
+    # Monday morning, so it is waiting rather than arriving mid-week.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisories:
+    name: Security advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: Engine workspace
+        run: cargo deny --all-features check advisories bans
+      - name: Desktop workspace
+        run: cargo deny --all-features --manifest-path apps/desktop/Cargo.toml check advisories bans
+
+  npm:
+    name: Interface dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Advisory only. A transitive development dependency with a moderate
+      # advisory should not stop the week; it should be visible.
+      - run: npm audit --audit-level=high

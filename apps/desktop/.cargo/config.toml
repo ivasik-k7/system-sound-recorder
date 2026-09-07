@@ -1,0 +1,16 @@
+# The desktop shell targets Windows like the rest of the project.
+#
+# Note that cross-compiling Tauri from Linux is not something upstream supports:
+# the webview bindings expect the MSVC toolchain and the WebView2 SDK. This
+# configuration exists so the attempt is at least reproducible; see
+# scripts/build-desktop.sh for the supported path.
+[build]
+target = "x86_64-pc-windows-gnu"
+
+[target.x86_64-pc-windows-gnu]
+linker = "/home/ivan/.local/mingw-w64/usr/bin/x86_64-w64-mingw32-gcc"
+ar = "/home/ivan/.local/mingw-w64/usr/bin/x86_64-w64-mingw32-ar"
+rustflags = [
+  "-Cdlltool=/home/ivan/.local/mingw-w64/usr/bin/x86_64-w64-mingw32-dlltool",
+  "-Clink-arg=-static-libgcc",
+]
