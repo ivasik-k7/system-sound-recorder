@@ -41,7 +41,7 @@ jobs:
       version: ${{ steps.read.outputs.version }}
       publish: ${{ steps.read.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: read
         run: |
           version="$(grep -m1 -E '^version[[:space:]]*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
@@ -61,7 +61,7 @@ jobs:
     env:
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
@@ -82,7 +82,7 @@ jobs:
           cd staging && 7z a -mx=9 "../$name.zip" "$name" >/dev/null
           cd .. && ls -lh "$name.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli
           path: '*.zip'
@@ -95,11 +95,11 @@ jobs:
     env:
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -139,7 +139,7 @@ jobs:
           # nothing, which must not look like success.
           test -n "$(ls -A staging)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop
           path: staging/*
@@ -154,8 +154,8 @@ jobs:
       # To create the release and attach files to it.
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
