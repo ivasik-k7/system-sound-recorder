@@ -308,6 +308,7 @@ impl Resident {
                 start: s.start,
                 end: s.end,
                 text: s.text,
+                speaker: None,
             })
             .collect();
 
@@ -318,7 +319,15 @@ impl Resident {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join(" ");
-        if !text.is_empty() {
+        // Unless the model was repeating itself, in which case handing it back
+        // is how a stall in one utterance becomes a stall in the next four.
+        // `condition_on_previous_text` is off for exactly this reason and then
+        // this prompt puts the feedback straight back; a stalled model gets a
+        // clean slate instead.
+        let mended = crate::sanity::repair(&text);
+        if !mended.is_clean() {
+            self.previous.clear();
+        } else if !text.is_empty() {
             // Only the tail matters, and a long prompt costs time.
             self.previous = text
                 .chars()

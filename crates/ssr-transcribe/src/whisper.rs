@@ -146,6 +146,7 @@ fn run_whisper_cpp(
             start: s.offsets.from as f64 / 1000.0,
             end: s.offsets.to as f64 / 1000.0,
             text: s.text,
+            speaker: None,
         })
         .collect();
 
@@ -241,6 +242,7 @@ fn run_whisper_python(
                 start: s.start,
                 end: s.end,
                 text: s.text,
+                speaker: None,
             })
             .collect(),
         language: if parsed.language.is_empty() {

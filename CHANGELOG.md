@@ -13,6 +13,85 @@ says nothing.
 
 Nothing yet.
 
+## [0.3.0] - 2026-09-08
+
+A release about believing the transcript. Recognition was producing text that
+nothing downstream could distinguish from speech, writing it to whichever
+directory the program happened to be started from, and describing it with
+metadata it had thrown away. The minor version rather than the patch, because
+the transcript format, the speaker labels and two public functions all change
+shape.
+
+### Added
+
+- **The engine's loops are detected and removed.** A speech model occasionally
+  falls into repeating one phrase until its window ends — forty copies of a
+  stumble, or a minute of bare full stops over silence. `sanity.rs` collapses
+  any phrase repeated three times or more to a single copy, and drops what is
+  left if it turns out to be nothing but punctuation. Measured against a
+  forty-five minute interview recorded with this tool, that is 3,378 words out
+  of 10,256: a third of what came back was never said. The number removed is
+  shown while listening, because a transcript that was cleaned should say so.
+- **A warning before saving somewhere a transcript should not go.** The save
+  dialog now checks the chosen folder and says so if it sits inside a git
+  repository or a sync folder. It warns; it does not refuse.
+- Transcripts record the language and the model that produced them. Saved files
+  used to say `"language": "unknown"` and name no model at all, which makes a
+  transcript impossible to judge or to reproduce.
+
+### Changed
+
+- **Speaker attribution is a field of its own, not a prefix on the words.** It
+  used to be pasted onto the front of the text, so every consumer — the plain
+  text export, the subtitles, the word count, anything reading the JSON —
+  received it as though it were something somebody had said. One transcript
+  carried four thousand words of attribution inside its own prose and reported
+  a word count half again as large as the words in it.
+- **Labels are `Speaker 2`, not `<channel>, speaker 2`.** The channel is already
+  on the line and in the header. The qualifier also used to depend on how many
+  voices had been heard *so far*, so the first line of a conversation was named
+  after the channel and everything after it was numbered — and that first line
+  then appeared in the speaker list as a person of its own.
+- **The plain text export is a conversation again.** One paragraph per turn.
+  For a forty-five minute recording it had been a single line of nine thousand
+  words with no breaks in it.
+- **Meeting notes distinguish what a phrase means from what it might mean.**
+  Cues are in two tiers: `action item` and `we agreed` are reported as said,
+  `let's` and `can you` as guesses and only when the line has some substance
+  behind it. Near-duplicates collapse, and each section is capped and says how
+  many it left out. On the interview above this turns ninety-eight bullets,
+  nearly all of them noise, into forty-one with the certain ones first.
+- The speech worker decodes with a short temperature fallback again, and the
+  thresholds that trigger it. Disabling it kept a hard passage from taking many
+  times as long as an easy one, but it is also the mechanism that catches the
+  model looping, and that trade was not worth making.
+- `notes::classify` returns a `Match` rather than a tuple, and `Segment` has a
+  `speaker` field. Both are breaking changes for anything built against them.
+
+### Fixed
+
+- **Transcripts were written to a relative path.** The default was
+  `transcripts/`, which resolves against wherever the program was started from
+  rather than anywhere anyone chose. In practice that was a source checkout, so
+  transcripts of real meetings accumulated inside a git repository. The default
+  is now an absolute path under `Documents`, and two tests pin that it is
+  absolute and never the working directory.
+- **A stalled utterance was primed into the next one.** `condition_on_previous_text`
+  is off precisely so that a bad decode cannot propagate, and then the previous
+  line was handed back as a prompt, which propagates it by another route. That
+  is why loops came in runs of three and four consecutive utterances.
+- The activity log had no styles of its own, so each line rendered as two
+  adjacent spans and read `10:25:12 AMReady.` — the timestamp welded to the
+  message. Timestamps are now a dim monospace column with the messages aligned
+  beside them.
+- **Segment end times could not be true.** The model reports the end of its
+  padded window rather than the end of the speech, so a two-word answer came
+  back stamped as twenty-nine seconds and ran past the start of the next two
+  utterances. Speaking times for a meeting added up to fifty-two minutes inside
+  a forty-five minute recording. Ends are now clamped to the utterance they came
+  from and trimmed back to the next start. Nothing invents a better time; it
+  only declines to state an impossible one.
+
 ## [0.2.1] - 2026-09-07
 
 ### Added

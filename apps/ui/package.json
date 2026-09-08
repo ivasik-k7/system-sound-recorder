@@ -1,7 +1,7 @@
 {
   "name": "ssr-ui",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "Desktop interface for the system sound recorder.",
   "scripts": {

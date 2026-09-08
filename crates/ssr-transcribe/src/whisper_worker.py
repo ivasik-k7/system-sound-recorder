@@ -15,9 +15,15 @@ machine is visibly doing:
 * It leaves cores free. Left alone these libraries take every core, which
   starves the audio capture and makes the whole interface stutter — the
   transcription gets faster and everything else gets worse.
-* It decodes greedily and does not fall back through rising temperatures. The
-  fallback is what makes a difficult passage occasionally take ten times as long
-  as an easy one, which is far more disruptive than the words it rescues.
+* It decodes greedily, but it does fall back through a short ladder of rising
+  temperatures when a decode comes back degenerate. This used to be switched off
+  entirely, to stop a difficult passage taking many times as long as an easy
+  one. That was a bad trade. The fallback is the mechanism that detects the
+  model looping — emitting one phrase over and over until the window ends — and
+  retries it, and without it a third of the words in a long recording came back
+  as loop rather than speech. The ladder is kept short so the worst case stays
+  bounded, and `sanity.rs` on the Rust side cleans up whatever still gets
+  through.
 
 Audio arrives as raw samples over the pipe rather than as a file, which avoids
 writing a temporary wav per utterance and, more usefully, avoids ffmpeg: whisper
@@ -37,6 +43,7 @@ Anything the libraries print goes to stderr, so the pipe carrying the protocol
 cannot be corrupted by a stray warning.
 """
 
+import inspect
 import json
 import os
 import sys
@@ -51,6 +58,40 @@ def fail(message):
     sys.stderr.write(message + "\n")
     sys.stderr.flush()
     raise SystemExit(1)
+
+
+# The settings that stop a decode running away with itself.
+#
+# A model that has started looping produces text that compresses extremely well,
+# which is exactly what `compression_ratio_threshold` measures; whisper responds
+# by retrying the window at a higher temperature, which breaks the cycle. None
+# of that happens with a single temperature, because there is nothing to retry
+# at. The ladder is deliberately short — three attempts, not the stock six — so
+# that a hard passage costs a bounded amount of extra time rather than ten times
+# the usual.
+#
+# The two implementations spell some of these differently and older releases do
+# not have all of them, so they are filtered against the actual signature rather
+# than passed blind. A missing guard is a worse transcript; a TypeError is no
+# transcript at all.
+GUARDS = {
+    "temperature": (0.0, 0.2, 0.4),
+    "compression_ratio_threshold": 2.4,
+    "logprob_threshold": -1.0,      # openai-whisper
+    "log_prob_threshold": -1.0,     # faster-whisper
+    "no_speech_threshold": 0.6,
+}
+
+
+def supported(fn, options):
+    """Keep only the options `fn` will actually accept."""
+    try:
+        allowed = set(inspect.signature(fn).parameters)
+    except (TypeError, ValueError):
+        # Some builds expose C extensions with no introspectable signature.
+        # Passing nothing extra is the safe reading.
+        return {}
+    return {k: v for k, v in options.items() if k in allowed}
 
 
 def spare_threads():
@@ -106,9 +147,9 @@ class FasterWhisper:
             language=language or None,
             task="translate" if translate else "transcribe",
             beam_size=1,
-            temperature=0.0,
             condition_on_previous_text=False,
             initial_prompt=prompt or None,
+            **supported(self.model.transcribe, GUARDS),
             # Off by default. Word timings are a second alignment pass over the
             # audio, and while a conversation is being read live the delay costs
             # more than the precision buys. The segment boundaries are good
@@ -142,11 +183,9 @@ class OpenAIWhisper:
             fp16=False,
             language=language or None,
             task="translate" if translate else "transcribe",
-            # A single temperature, so a hard passage cannot take ten times as
-            # long as an easy one while the conversation moves on without it.
-            temperature=0.0,
             condition_on_previous_text=False,
             initial_prompt=prompt or None,
+            **supported(self.model.transcribe, GUARDS),
             # See the note in the other backend: this is an extra pass over the
             # audio and it is the single largest avoidable cost per utterance.
             word_timestamps=bool(job_words),

@@ -48,6 +48,12 @@ export interface ModelInfo {
   bytes?: number
 }
 
+/** Something worth knowing before writing a transcript to a folder. */
+export interface LocationWarning {
+  summary: string
+  detail: string
+}
+
 /** How a model download is going. */
 export interface ModelDownload {
   active: boolean
@@ -114,6 +120,9 @@ export interface ListenStatus {
   transcriptPath: string
   totalLines: number
   speakers: number
+  /** Words dropped because the engine was repeating itself rather than
+   *  listening. Reported so a cleaned transcript says that it was cleaned. */
+  repairedWords: number
   error?: string
 }
 
@@ -151,6 +160,9 @@ export interface SaveRequest {
    *  decision, and the whole transcript underneath it. */
   includeNotes: boolean
   startedUtc: string
+  /** Recorded with the transcript, so a reader later can tell what produced it. */
+  language: string
+  model: string
 }
 
 export interface SaveResult {
@@ -167,6 +179,7 @@ export const idleStatus = (): ListenStatus => ({
   transcriptPath: '',
   totalLines: 0,
   speakers: 0,
+  repairedWords: 0,
 })
 
 export const transcribeApi = {
@@ -222,6 +235,13 @@ export const transcribeApi = {
       : sim.voices()
   },
 
+  /** Reasons the chosen folder is a poor home for a conversation. */
+  async checkLocation(directory: string): Promise<LocationWarning[]> {
+    return isDesktop()
+      ? invoke<LocationWarning[]>('check_save_location', { directory })
+      : sim.checkLocation(directory)
+  },
+
   async sessionTracks(path: string): Promise<string[]> {
     return isDesktop() ? invoke<string[]>('session_tracks', { path }) : ['system', 'mic']
   },
@@ -269,7 +289,7 @@ const sim = (() => {
         channel,
         speaker: {
           index: Number(who),
-          label: `${channel}, speaker ${who}`,
+          label: `Speaker ${who}`,
           inferred: true,
         },
         start: produced * 4 + 1,
@@ -291,6 +311,7 @@ const sim = (() => {
       transcriptPath: `C:\\Users\\you\\Documents\\transcripts\\${channel}.md`,
       totalLines: lines.length,
       speakers: new Set(lines.map((l) => l.speaker.label)).size,
+      repairedWords: 0,
     }
   }
 
@@ -366,10 +387,22 @@ const sim = (() => {
       running = false
       return { ...s, active: false }
     },
+    async checkLocation(directory: string): Promise<LocationWarning[]> {
+      const lower = directory.toLowerCase()
+      if (lower.includes('onedrive') || lower.includes('dropbox')) {
+        return [
+          {
+            summary: 'This folder syncs elsewhere',
+            detail: 'Anything written here leaves this machine.',
+          },
+        ]
+      }
+      return []
+    },
     async name(index: number, name: string): Promise<Line[]> {
       for (const line of lines) {
         if (line.speaker.index === index) {
-          line.speaker.label = name.trim() || `${channel}, speaker ${index}`
+          line.speaker.label = name.trim() || `Speaker ${index}`
           line.speaker.inferred = name.trim() === ''
         }
       }

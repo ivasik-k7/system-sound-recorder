@@ -17,6 +17,16 @@ pub struct Segment {
     pub start: f64,
     pub end: f64,
     pub text: String,
+    /// Who said it, when that is known.
+    ///
+    /// Held apart from the words on purpose. This used to be pasted onto the
+    /// front of `text`, which meant every consumer of a transcript — the plain
+    /// text export, the subtitle files, the word count, anything reading the
+    /// JSON — received the label as though it were something somebody said.
+    /// A transcript of a forty-five minute meeting carried four thousand words
+    /// of attribution inside its own prose and no way to separate them again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }
 
 impl Segment {
@@ -44,7 +54,43 @@ pub struct Transcript {
 }
 
 impl Transcript {
-    /// Everything said, as flowing text.
+    /// Everything said, laid out as a conversation.
+    ///
+    /// One paragraph per turn, so a long meeting is something a person can
+    /// actually read. The plain text export used to be [`Transcript::plain_text`]
+    /// verbatim, which for a forty-five minute recording meant a single line of
+    /// nine thousand words with no breaks and no timings in it.
+    pub fn conversation(&self) -> String {
+        let mut out = String::new();
+        let mut current: Option<&str> = None;
+        for segment in &self.segments {
+            let text = segment.text.trim();
+            if text.is_empty() {
+                continue;
+            }
+            let speaker = segment.speaker.as_deref();
+            if speaker != current || out.is_empty() {
+                if !out.is_empty() {
+                    out.push_str("\n\n");
+                }
+                if let Some(name) = speaker {
+                    out.push_str(name);
+                    out.push_str(": ");
+                }
+                current = speaker;
+            } else {
+                out.push(' ');
+            }
+            out.push_str(text);
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out
+    }
+
+    /// Everything said, as flowing text. The words alone: no attribution, which
+    /// is what makes it safe to count and to search.
     pub fn plain_text(&self) -> String {
         let mut out = String::new();
         for segment in &self.segments {
@@ -176,8 +222,7 @@ pub fn render(transcript: &Transcript, format: TranscriptFormat) -> Result<Strin
     let mut out = String::new();
     match format {
         TranscriptFormat::Txt => {
-            out.push_str(&transcript.plain_text());
-            out.push('\n');
+            out.push_str(&transcript.conversation());
         }
         TranscriptFormat::Srt => {
             // SubRip numbers its cues from one, and every cue needs text.
@@ -194,7 +239,10 @@ pub fn render(transcript: &Transcript, format: TranscriptFormat) -> Result<Strin
                     srt_time(segment.start),
                     srt_time(segment.end)
                 )?;
-                writeln!(out, "{text}")?;
+                match &segment.speaker {
+                    Some(who) => writeln!(out, "{who}: {text}")?,
+                    None => writeln!(out, "{text}")?,
+                }
                 out.push('\n');
                 n += 1;
             }
@@ -212,7 +260,10 @@ pub fn render(transcript: &Transcript, format: TranscriptFormat) -> Result<Strin
                     vtt_time(segment.start),
                     vtt_time(segment.end)
                 )?;
-                writeln!(out, "{text}")?;
+                match &segment.speaker {
+                    Some(who) => writeln!(out, "<v {who}>{text}")?,
+                    None => writeln!(out, "{text}")?,
+                }
                 out.push('\n');
             }
         }
@@ -239,7 +290,14 @@ pub fn render(transcript: &Transcript, format: TranscriptFormat) -> Result<Strin
                 if text.is_empty() {
                     continue;
                 }
-                writeln!(out, "**{}** {text}", friendly_time(segment.start))?;
+                match &segment.speaker {
+                    Some(who) => writeln!(
+                        out,
+                        "**{}** **{who}:** {text}",
+                        friendly_time(segment.start)
+                    )?,
+                    None => writeln!(out, "**{}** {text}", friendly_time(segment.start))?,
+                }
                 out.push('\n');
             }
         }
@@ -310,19 +368,104 @@ mod tests {
                     start: 0.0,
                     end: 2.5,
                     text: " Good morning everyone.".into(),
+                    speaker: None,
                 },
                 Segment {
                     start: 2.5,
                     end: 4.0,
                     text: "  ".into(),
+                    speaker: None,
                 },
                 Segment {
                     start: 4.0,
                     end: 7.25,
                     text: "Shall we begin?".into(),
+                    speaker: None,
                 },
             ],
         }
+    }
+
+    /// The same conversation, with the voices told apart.
+    fn meeting() -> Transcript {
+        let mut t = sample();
+        t.segments = vec![
+            Segment {
+                start: 0.0,
+                end: 2.5,
+                text: "Good morning everyone.".into(),
+                speaker: Some("Speaker 1".into()),
+            },
+            Segment {
+                start: 2.5,
+                end: 4.0,
+                text: "Shall we begin?".into(),
+                speaker: Some("Speaker 1".into()),
+            },
+            Segment {
+                start: 4.0,
+                end: 7.25,
+                text: "Yes, go ahead.".into(),
+                speaker: Some("Speaker 2".into()),
+            },
+        ];
+        t
+    }
+
+    #[test]
+    fn plain_text_counts_words_and_not_attribution() {
+        // The label used to live inside the text, so a transcript's own word
+        // count included several thousand words of "channel, speaker 2".
+        assert_eq!(meeting().word_count(), 9);
+        assert!(!meeting().plain_text().contains("Speaker"));
+    }
+
+    #[test]
+    fn the_text_export_is_a_conversation_and_not_one_long_line() {
+        let out = render(&meeting(), TranscriptFormat::Txt).unwrap();
+        assert_eq!(
+            out,
+            "Speaker 1: Good morning everyone. Shall we begin?\n\nSpeaker 2: Yes, go ahead.\n"
+        );
+        // A turn per paragraph, so a long meeting can be read at all.
+        assert!(out.lines().count() > 1);
+    }
+
+    #[test]
+    fn a_turn_that_spans_several_segments_stays_one_paragraph() {
+        let out = meeting().conversation();
+        assert_eq!(out.matches("Speaker 1:").count(), 1);
+    }
+
+    #[test]
+    fn markdown_names_the_speaker_beside_the_time() {
+        let out = render(&meeting(), TranscriptFormat::Md).unwrap();
+        assert!(out.contains("**0:00** **Speaker 1:** Good morning everyone."));
+        // And the header counts spoken words only.
+        assert!(out.contains("9 words"), "{out}");
+    }
+
+    #[test]
+    fn subtitles_name_the_speaker_in_the_cue() {
+        let srt = render(&meeting(), TranscriptFormat::Srt).unwrap();
+        assert!(srt.contains("Speaker 2: Yes, go ahead."));
+        let vtt = render(&meeting(), TranscriptFormat::Vtt).unwrap();
+        assert!(vtt.contains("<v Speaker 2>Yes, go ahead."));
+    }
+
+    #[test]
+    fn json_keeps_the_speaker_out_of_the_words() {
+        let out = render(&meeting(), TranscriptFormat::Json).unwrap();
+        let back: Transcript = serde_json::from_str(&out).unwrap();
+        assert_eq!(back.segments[0].text, "Good morning everyone.");
+        assert_eq!(back.segments[0].speaker.as_deref(), Some("Speaker 1"));
+    }
+
+    #[test]
+    fn a_transcript_with_no_speakers_reads_as_it_always_did() {
+        let out = render(&sample(), TranscriptFormat::Json).unwrap();
+        // Nothing to say, so nothing written: old readers see the old shape.
+        assert!(!out.contains("speaker"));
     }
 
     #[test]
@@ -377,6 +520,7 @@ mod tests {
             start: 3.0,
             end: 3.8,
             text: "Yes, go ahead.".into(),
+            speaker: None,
         }];
 
         let merged = merge(&[sample(), mic]);

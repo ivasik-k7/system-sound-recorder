@@ -2,9 +2,9 @@
 //!
 //! One string, in one place, so the command line, the session manifest and the
 //! interface cannot disagree about which build is running. The shape is
-//! `v0.2.1-abc1234`: the released version, and the commit it was built from.
+//! `v0.3.0-abc1234`: the released version, and the commit it was built from.
 //!
-//! The manifest files and package manifests keep the bare `0.2.1`, because
+//! The manifest files and package manifests keep the bare `0.3.0`, because
 //! that is all a Cargo version, an npm version or an MSI product version will
 //! accept. The combined form is for people.
 
@@ -26,7 +26,7 @@ mod tests {
         assert!(FULL.starts_with("v"));
         assert!(FULL.contains(NUMBER));
         assert!(FULL.ends_with(BUILD_REF));
-        // `v0.2.1-abc1234`: exactly one separator between the two parts.
+        // `v0.3.0-abc1234`: exactly one separator between the two parts.
         let after_v = &FULL[1..];
         assert_eq!(after_v, format!("{NUMBER}-{BUILD_REF}"));
     }

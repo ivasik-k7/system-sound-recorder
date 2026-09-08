@@ -432,7 +432,10 @@ fn name_speaker(
     index: usize,
     name: String,
 ) -> CmdResult<Vec<ssr_transcribe::live::Line>> {
-    let slot = state.live.lock().map_err(|_| "listening state is poisoned".to_string())?;
+    let slot = state
+        .live
+        .lock()
+        .map_err(|_| "listening state is poisoned".to_string())?;
     match slot.as_ref() {
         Some(session) => Ok(session.name_speaker(index, &name)),
         None => Err("there is no conversation to name anyone in".to_string()),
@@ -442,7 +445,10 @@ fn name_speaker(
 /// The voices heard so far: their number, their automatic label, and any name.
 #[tauri::command]
 fn conversation_voices(state: State<'_, AppState>) -> CmdResult<Vec<(usize, String, String)>> {
-    let slot = state.live.lock().map_err(|_| "listening state is poisoned".to_string())?;
+    let slot = state
+        .live
+        .lock()
+        .map_err(|_| "listening state is poisoned".to_string())?;
     Ok(slot.as_ref().map(|s| s.voices()).unwrap_or_default())
 }
 
@@ -529,6 +535,7 @@ pub fn run() {
             session_tracks,
             name_speaker,
             conversation_voices,
+            transcribe::check_save_location,
             transcribe::list_speech_models,
             download_speech_model,
             model_download_status,

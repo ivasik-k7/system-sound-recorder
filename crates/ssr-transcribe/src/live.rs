@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::engine::Engine;
 use crate::resident::Resident;
+use crate::sanity;
 use crate::speakers::{self, Diariser, Speaker};
 use crate::transcript::{Segment, Transcript};
 use crate::vad;
@@ -276,7 +277,60 @@ pub struct Listener {
     worker: Option<JoinHandle<()>>,
     /// How many utterances are queued but not yet recognised.
     backlog: Arc<AtomicUsize>,
+    /// Words thrown away because the model was repeating itself. Worth showing
+    /// rather than hiding: it is the honest measure of how much of what came
+    /// back was not speech.
+    repaired: Arc<AtomicUsize>,
     sample_rate: u32,
+}
+
+/// Put the pieces of one utterance onto a timeline that can be trusted.
+///
+/// The times a speech model reports are advisory. It is decoding a window
+/// padded out to a fixed length, so the end it gives for the last thing it
+/// heard is frequently the end of the padding rather than the end of the
+/// speech — which is how a two-word answer comes back stamped as twenty-nine
+/// seconds long. Uncorrected, those ends run past the start of the next
+/// utterance and past the one after that, and the speaking-time totals for a
+/// meeting add up to more minutes than the meeting lasted.
+///
+/// Nothing here invents a better time. It only refuses to state one that cannot
+/// be true: a piece of an utterance cannot begin before it or end after it, and
+/// it cannot still be running when the next piece has started.
+fn settle(pieces: Vec<Heard>, spoken: f64) -> Vec<Heard> {
+    let mut kept: Vec<Heard> = Vec::with_capacity(pieces.len());
+    for mut piece in pieces {
+        if piece.text.trim().is_empty() {
+            continue;
+        }
+        if spoken > 0.0 {
+            piece.start = piece.start.clamp(0.0, spoken);
+            piece.end = piece.end.clamp(piece.start, spoken);
+            // A model that reported nothing usable gets the rest of the
+            // utterance, which is the widest honest answer.
+            if piece.end <= piece.start {
+                piece.end = spoken;
+            }
+        } else if piece.end < piece.start {
+            piece.end = piece.start;
+        }
+
+        if let Some(previous) = kept.last_mut() {
+            // Out of order is not a thing an utterance does; treat a piece that
+            // claims to start earlier as starting where the last one did.
+            if piece.start < previous.start {
+                piece.start = previous.start;
+                piece.end = piece.end.max(piece.start);
+            }
+            // Trim the overlap off the earlier piece rather than the later one,
+            // because it is the end that is suspect and the start that is not.
+            if previous.end > piece.start && piece.start > previous.start {
+                previous.end = piece.start;
+            }
+        }
+        kept.push(piece);
+    }
+    kept
 }
 
 /// The audio behind one recognised piece, when there is enough of it to judge.
@@ -320,11 +374,13 @@ impl Listener {
         let (to_worker, jobs) = bounded::<Job>(16);
         let (to_caller, lines) = bounded::<Line>(256);
         let backlog = Arc::new(AtomicUsize::new(0));
+        let repaired = Arc::new(AtomicUsize::new(0));
 
         let mut writer = LineWriter::open(&options)?;
         let mut diariser = Diariser::new(options.channel.clone(), options.detect_speakers);
         let channel = options.channel.clone();
         let worker_backlog = backlog.clone();
+        let worker_repaired = repaired.clone();
 
         let worker = std::thread::Builder::new()
             .name("ssr-listen".into())
@@ -354,9 +410,18 @@ impl Listener {
                     let overall = speakers::voice_print(&job.samples, sample_rate);
 
                     let mut sent_any = false;
-                    for piece in pieces {
-                        if piece.text.trim().is_empty() {
+                    let spoken = job.end - job.start;
+                    for piece in settle(pieces, spoken) {
+                        // Collapse anything the model repeated itself into.
+                        // Left alone this is not a blemish but a third of the
+                        // words, and it is indistinguishable downstream from
+                        // something a person said.
+                        let mended = sanity::repair(&piece.text);
+                        if mended.is_empty() {
                             continue;
+                        }
+                        if !mended.is_clean() {
+                            worker_repaired.fetch_add(mended.removed_words(), Ordering::SeqCst);
                         }
 
                         // Classify each piece on its own audio. This is what
@@ -378,7 +443,7 @@ impl Listener {
                             // conversation wants them relative to the session.
                             start: job.start + piece.start,
                             end: job.start + piece.end,
-                            text: piece.text,
+                            text: mended.text,
                         };
 
                         writer.append(&line);
@@ -401,6 +466,7 @@ impl Listener {
             lines,
             worker: Some(worker),
             backlog,
+            repaired,
             sample_rate,
         })
     }
@@ -452,6 +518,11 @@ impl Listener {
     /// Utterances heard but not yet recognised.
     pub fn backlog(&self) -> usize {
         self.backlog.load(Ordering::SeqCst)
+    }
+
+    /// Words dropped because the engine was looping rather than listening.
+    pub fn repaired_words(&self) -> usize {
+        self.repaired.load(Ordering::SeqCst)
     }
 
     /// Seconds of audio heard.
@@ -584,11 +655,11 @@ pub fn to_transcript(lines: &[Line], channel: &str, engine: &str) -> Transcript 
             .map(|l| Segment {
                 start: l.start,
                 end: l.end,
-                text: if l.speaker.inferred {
-                    format!("{}: {}", l.speaker.label, l.text)
-                } else {
-                    l.text.clone()
-                },
+                text: l.text.clone(),
+                // Named, not pasted into the words. Every format decides for
+                // itself how to show a speaker, and the ones that should not
+                // show one at all can now leave it out.
+                speaker: l.speaker.inferred.then(|| l.speaker.label.clone()),
             })
             .collect(),
     }
@@ -632,6 +703,59 @@ mod tests {
                     start: middle,
                     end: whole,
                     text: "second half".into(),
+                },
+            ])
+        }
+    }
+
+    /// Stalls the way a real model stalls: a few honest words and then the
+    /// same phrase until the window runs out.
+    struct Stuck;
+
+    impl Recogniser for Stuck {
+        fn recognise(&mut self, samples: &[f32], rate: u32) -> Result<Vec<Heard>> {
+            Ok(vec![Heard {
+                start: 0.0,
+                end: samples.len() as f64 / rate as f64,
+                text: format!(
+                    "we have used lambdas. {}",
+                    "So, we have used lambdas. ".repeat(60)
+                ),
+            }])
+        }
+    }
+
+    /// Emits punctuation over silence, which is the other thing a model does
+    /// when there is nothing to hear.
+    struct Muttering;
+
+    impl Recogniser for Muttering {
+        fn recognise(&mut self, _samples: &[f32], _rate: u32) -> Result<Vec<Heard>> {
+            Ok(vec![Heard {
+                start: 0.0,
+                end: 1.0,
+                text: ". ".repeat(200),
+            }])
+        }
+    }
+
+    /// Reports times that cannot be true: pieces running past the end of the
+    /// utterance they came from, and past each other.
+    struct Overrunning;
+
+    impl Recogniser for Overrunning {
+        fn recognise(&mut self, samples: &[f32], rate: u32) -> Result<Vec<Heard>> {
+            let whole = samples.len() as f64 / rate as f64;
+            Ok(vec![
+                Heard {
+                    start: 0.0,
+                    end: whole + 27.0,
+                    text: "first".into(),
+                },
+                Heard {
+                    start: whole / 2.0,
+                    end: whole + 29.0,
+                    text: "second".into(),
                 },
             ])
         }
@@ -790,5 +914,136 @@ mod tests {
         assert_eq!(clock(0.0), "0:00");
         assert_eq!(clock(75.0), "1:15");
         assert_eq!(clock(3725.0), "1:02:05");
+    }
+
+    #[test]
+    fn a_looping_engine_does_not_fill_the_transcript_with_its_loop() {
+        let mut listener =
+            Listener::start(RATE, Options::for_channel("Citrix"), Box::new(Stuck)).unwrap();
+        listener.push(&quiet(0.6));
+        listener.push(&speech(1.5, 120.0));
+        listener.push(&quiet(1.2));
+        let lines = listener.finish();
+
+        assert_eq!(lines.len(), 1, "got {lines:?}");
+        // One honest copy of the phrase survives; the other fifty-nine are
+        // gone. The leading words are not part of the repeating unit, so they
+        // stay where they were.
+        assert_eq!(
+            lines[0].text,
+            "we have used lambdas. So, we have used lambdas."
+        );
+    }
+
+    #[test]
+    fn punctuation_over_silence_produces_no_line_at_all() {
+        let mut listener =
+            Listener::start(RATE, Options::for_channel("Citrix"), Box::new(Muttering)).unwrap();
+        listener.push(&quiet(0.6));
+        listener.push(&speech(1.5, 120.0));
+        listener.push(&quiet(1.2));
+        assert!(listener.finish().is_empty());
+    }
+
+    #[test]
+    fn no_line_may_outlast_the_utterance_it_came_from() {
+        let mut listener =
+            Listener::start(RATE, Options::for_channel("Citrix"), Box::new(Overrunning)).unwrap();
+        listener.push(&quiet(0.6));
+        listener.push(&speech(2.0, 120.0));
+        listener.push(&quiet(1.2));
+        let lines = listener.finish();
+
+        assert_eq!(lines.len(), 2, "got {lines:?}");
+        // The utterance was two seconds of speech; nothing in it can run for
+        // thirty, and the first piece cannot still be going when the second
+        // has started.
+        for line in &lines {
+            assert!(line.duration() <= 4.0, "{line:?}");
+            assert!(line.end >= line.start, "{line:?}");
+        }
+        assert!(lines[0].end <= lines[1].start + f64::EPSILON, "{lines:?}");
+    }
+
+    #[test]
+    fn settle_trims_an_end_back_to_the_next_start() {
+        let out = settle(
+            vec![
+                Heard {
+                    start: 0.0,
+                    end: 29.0,
+                    text: "first".into(),
+                },
+                Heard {
+                    start: 1.0,
+                    end: 29.0,
+                    text: "second".into(),
+                },
+            ],
+            5.0,
+        );
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].start, 0.0);
+        assert_eq!(out[0].end, 1.0);
+        assert_eq!(out[1].end, 5.0);
+    }
+
+    #[test]
+    fn settle_puts_pieces_that_arrive_out_of_order_back_in_order() {
+        let out = settle(
+            vec![
+                Heard {
+                    start: 3.0,
+                    end: 4.0,
+                    text: "later".into(),
+                },
+                Heard {
+                    start: 1.0,
+                    end: 2.0,
+                    text: "earlier".into(),
+                },
+            ],
+            5.0,
+        );
+        assert!(out[1].start >= out[0].start, "{out:?}");
+        assert!(out[1].end >= out[1].start, "{out:?}");
+    }
+
+    #[test]
+    fn settle_gives_a_piece_with_no_usable_timing_the_rest_of_the_utterance() {
+        let out = settle(
+            vec![Heard {
+                start: 2.0,
+                end: 0.0,
+                text: "hm".into(),
+            }],
+            5.0,
+        );
+        assert_eq!(out[0].start, 2.0);
+        assert_eq!(out[0].end, 5.0);
+    }
+
+    #[test]
+    fn the_listener_counts_the_words_it_threw_away() {
+        let mut listener =
+            Listener::start(RATE, Options::for_channel("Citrix"), Box::new(Stuck)).unwrap();
+        listener.push(&quiet(0.6));
+        listener.push(&speech(1.5, 120.0));
+        listener.push(&quiet(1.2));
+        // Read while the session is still open, which is how the interface
+        // reads it: this is a running total, not a closing report.
+        let mut counted = 0;
+        for _ in 0..200 {
+            counted = listener.repaired_words();
+            if counted > 0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(
+            counted >= 200,
+            "expected the loop to be counted, got {counted}"
+        );
+        let _ = listener.finish();
     }
 }

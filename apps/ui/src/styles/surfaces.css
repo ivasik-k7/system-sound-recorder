@@ -469,3 +469,39 @@
 .chip-list {
   gap: 10px;
 }
+
+/* --- the activity log --------------------------------------------------- */
+
+/*
+ * These had no rules at all, so a line rendered as two adjacent inline spans
+ * and read "10:25:12 AMReady." — the timestamp welded to the message.
+ */
+.log {
+  font-size: var(--fs-2);
+}
+
+.log__line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.log__time {
+  flex: none;
+  /* Fixed width and tabular figures, so the messages line up as a column
+     rather than stepping in and out with the width of each timestamp. */
+  min-width: 9ch;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-1);
+  color: var(--text-3);
+}
+
+.log__line--warn {
+  color: var(--warn);
+}
+
+.log__line--error {
+  color: var(--danger);
+}

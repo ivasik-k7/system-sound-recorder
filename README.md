@@ -50,7 +50,7 @@ Download from the [latest release](https://github.com/ivasik-k7/system-sound-rec
 Verify a download against `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash .\System-Sound-Recorder-0.2.1-setup.exe -Algorithm SHA256
+Get-FileHash .\System-Sound-Recorder-0.3.0-setup.exe -Algorithm SHA256
 ```
 
 Releases are built by [GitHub Actions](.github/workflows/release.yml) from a
@@ -189,6 +189,7 @@ is not the one that suits watching it run for two hours.
 | Arrangement | For |
 |---|---|
 | Console | Everything at once. The default |
+| Conversation | Reading a channel as it is spoken, with the channels beside it |
 | Setup | Deciding what to record, with discovery given room to read |
 | Monitor | A running session: mixer and level history, large |
 | Diagnostics | Working out why a recording is not what it should be |
@@ -229,6 +230,14 @@ Recorded tracks can be turned into text, and a channel can be transcribed while
 it is playing. The advantage of doing it here is that the recorder already knows
 which track is which, so a meeting captured as a Citrix track and a microphone
 track transcribes into two transcripts that are already attributed.
+
+![The Conversation arrangement: a channel being read as it is spoken, voices told apart, with discovery beside it](docs/images/transcribe.png)
+
+In the interface this is the Conversation arrangement: choose a channel, press
+Listen, and the words appear as they are said. Voices are told apart and can be
+given names, which are applied backwards through everything already said. The
+transcript is appended to a file line by line as it goes, so closing the window
+or losing power leaves a usable transcript rather than nothing.
 
 ```bash
 ssr transcribe recordings/2026-09-07_14-05-11    # a finished session

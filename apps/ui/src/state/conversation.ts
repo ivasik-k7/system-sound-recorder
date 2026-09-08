@@ -248,6 +248,8 @@ export const useConversation = create<ConversationState>((set, get) => ({
       formats,
       includeSpeakers,
       includeNotes,
+      language: get().language,
+      model: get().model,
       startedUtc: new Date(Date.now() - status.elapsedSecs * 1000)
         .toISOString()
         .replace(/\.\d+Z$/, 'Z'),

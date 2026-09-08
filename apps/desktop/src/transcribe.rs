@@ -123,6 +123,11 @@ pub struct ListenStatus {
     pub total_lines: usize,
     /// Distinct voices heard, when speaker detection is on.
     pub speakers: usize,
+    /// Words discarded because the engine was repeating itself rather than
+    /// listening. Shown rather than hidden: on a difficult recording this can
+    /// be a large fraction of what the model produced, and someone reading the
+    /// transcript deserves to know it was cleaned.
+    pub repaired_words: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -138,6 +143,7 @@ impl ListenStatus {
             transcript_path: String::new(),
             total_lines: 0,
             speakers: 0,
+            repaired_words: 0,
             error: None,
         }
     }
@@ -198,11 +204,6 @@ impl Shared {
             None => line.clone(),
         }
     }
-
-    /// Every line, named, for saving.
-    fn all_named(&self) -> Vec<Line> {
-        self.lines.iter().map(|l| self.named(l)).collect()
-    }
 }
 
 /// A running live transcription.
@@ -219,7 +220,7 @@ impl LiveSession {
         let transcript_path = config.transcript_path.clone().unwrap_or_else(|| {
             let stamp = ssr_core::local_timestamp();
             let safe = ssr_timeline::sanitize_filename(&config.label);
-            PathBuf::from("transcripts").join(format!("{stamp}-{safe}.md"))
+            ssr_transcribe::default_transcript_dir().join(format!("{stamp}-{safe}.md"))
         });
 
         let work_dir = std::env::temp_dir().join(format!("ssr-listen-{}", std::process::id()));
@@ -266,6 +267,7 @@ impl LiveSession {
                 transcript_path: transcript_path.display().to_string(),
                 total_lines: 0,
                 speakers: 0,
+                repaired_words: 0,
                 error: None,
             },
         }));
@@ -311,10 +313,12 @@ impl LiveSession {
 
                     let fresh = listener.drain();
                     let backlog = listener.backlog();
+                    let repaired = listener.repaired_words();
                     if let Ok(mut s) = worker_shared.lock() {
                         s.extend(fresh);
                         s.status.elapsed_secs = started.elapsed().as_secs_f64();
                         s.status.backlog = backlog;
+                        s.status.repaired_words = repaired;
                         s.status.total_lines = s.total();
                         s.status.speakers = distinct_speakers(&s.lines);
                     }
@@ -329,11 +333,13 @@ impl LiveSession {
 
                 // The last thing said is usually the part someone wanted, so
                 // the queue is drained rather than abandoned.
+                let repaired = listener.repaired_words();
                 let remaining = listener.finish();
                 if let Ok(mut s) = worker_shared.lock() {
                     s.extend(remaining);
                     s.status.active = false;
                     s.status.backlog = 0;
+                    s.status.repaired_words = repaired;
                     s.status.total_lines = s.total();
                     s.status.speakers = distinct_speakers(&s.lines);
                 }
@@ -410,14 +416,6 @@ impl LiveSession {
                 }
                 seen
             })
-            .unwrap_or_default()
-    }
-
-    /// Every line, with names applied, for saving.
-    pub fn all_lines(&self) -> Vec<Line> {
-        self.shared
-            .lock()
-            .map(|s| s.all_named())
             .unwrap_or_default()
     }
 
@@ -596,6 +594,17 @@ pub struct SaveRequest {
     /// When the recording started, for the header of that record.
     #[serde(default)]
     pub started_utc: String,
+    /// The language the engine was told to expect, or worked out.
+    ///
+    /// Recorded with the transcript because a reader months later needs to know
+    /// what assumption produced these words. Saved files used to say "unknown"
+    /// for this and nothing at all for the model, which makes a transcript
+    /// impossible to judge or to reproduce.
+    #[serde(default)]
+    pub language: String,
+    /// The model that produced it.
+    #[serde(default)]
+    pub model: String,
 }
 
 /// Where a save ended up.
@@ -617,6 +626,16 @@ pub fn save_conversation(request: SaveRequest) -> Result<SaveResult> {
 
     let mut transcript =
         ssr_transcribe::live::to_transcript(&request.lines, &request.channel, &request.engine);
+    // What the conversion knows is the words; what produced them is only known
+    // up here, where the settings live. Without this the saved file claims the
+    // language is "unknown" and names no model, and nobody reading it later can
+    // tell whether to trust it.
+    if !request.language.is_empty() {
+        transcript.language = request.language.clone();
+    }
+    if !request.model.is_empty() {
+        transcript.model = Some(request.model.clone());
+    }
     if !request.include_speakers {
         // Strip the attribution the conversion adds, for someone who wants the
         // words and nothing else.
@@ -634,12 +653,10 @@ pub fn save_conversation(request: SaveRequest) -> Result<SaveResult> {
         } else {
             request.started_utc.clone()
         };
-        let body =
-            ssr_transcribe::notes::meeting_notes(&request.lines, &request.channel, &started);
+        let body = ssr_transcribe::notes::meeting_notes(&request.lines, &request.channel, &started);
         std::fs::create_dir_all(&request.directory)?;
         let path = request.directory.join(format!("{stem} - notes.md"));
-        std::fs::write(&path, body)
-            .with_context(|| format!("writing {}", path.display()))?;
+        std::fs::write(&path, body).with_context(|| format!("writing {}", path.display()))?;
         files.push(path.display().to_string());
     }
 
@@ -820,4 +837,73 @@ impl Drop for DownloadJob {
             let _ = worker.join();
         }
     }
+}
+
+// --- where a transcript is about to land ------------------------------------
+
+/// Something worth knowing before writing a transcript to a chosen folder.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationWarning {
+    /// Short enough to sit next to the folder field.
+    pub summary: String,
+    /// What follows from it.
+    pub detail: String,
+}
+
+/// Look for reasons this is the wrong place for the content of a conversation.
+///
+/// Not a permission check and not a refusal: the folder is the user's choice.
+/// It exists because the consequences of a bad choice here are delayed and
+/// invisible. A transcript dropped into a source checkout sits quietly until
+/// somebody runs `git add -A`, and by then it is in a history that is hard to
+/// remove it from.
+#[tauri::command]
+pub fn check_save_location(directory: String) -> Vec<LocationWarning> {
+    let mut warnings = Vec::new();
+    let path = std::path::Path::new(&directory);
+
+    if directory.trim().is_empty() {
+        return warnings;
+    }
+
+    // A repository anywhere above this folder is the dangerous case, not just
+    // one in the folder itself.
+    let mut cursor = Some(path);
+    while let Some(current) = cursor {
+        if current.join(".git").exists() {
+            warnings.push(LocationWarning {
+                summary: "This folder is inside a git repository".into(),
+                detail: format!(
+                    "The repository at {} would track anything written here                      unless it is ignored. A transcript committed by accident                      is hard to remove from a history that has been pushed.",
+                    current.display()
+                ),
+            });
+            break;
+        }
+        cursor = current.parent();
+    }
+
+    // Folders that sync somewhere else the moment a file appears in them.
+    let lower = directory.to_lowercase();
+    for (needle, service) in [
+        ("onedrive", "OneDrive"),
+        ("dropbox", "Dropbox"),
+        ("google drive", "Google Drive"),
+        ("googledrive", "Google Drive"),
+        ("box sync", "Box"),
+        ("icloud", "iCloud"),
+    ] {
+        if lower.contains(needle) {
+            warnings.push(LocationWarning {
+                summary: format!("This folder syncs to {service}"),
+                detail: format!(
+                    "Anything written here leaves this machine. If the                      conversation is confidential, {service} is a copy of it                      that somebody else administers."
+                ),
+            });
+            break;
+        }
+    }
+
+    warnings
 }

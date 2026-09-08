@@ -337,5 +337,8 @@ fn resolve_output(args: &ListenArgs, channel: &str) -> PathBuf {
         "jsonl" | "json" => "jsonl",
         _ => "md",
     };
-    PathBuf::from("transcripts").join(format!("{stamp}-{safe}.{extension}"))
+    // Absolute, not relative to wherever this was run from. A transcript is
+    // the content of a conversation, and dropping one into whatever directory
+    // happened to be current is how it ends up somewhere it should not be.
+    ssr_transcribe::default_transcript_dir().join(format!("{stamp}-{safe}.{extension}"))
 }

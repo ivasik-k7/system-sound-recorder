@@ -20,6 +20,13 @@ node_modules/
 # searchable content of a conversation.
 /transcripts
 
+# Samples kept on purpose, for testing changes to the engine against. The
+# directory is tracked so its instructions are; its contents never are. See
+# samples/README.md for why that matters more here than for ordinary build
+# output.
+/samples/*
+!/samples/README.md
+
 # Python bytecode, from the transcription worker
 __pycache__/
 *.pyc

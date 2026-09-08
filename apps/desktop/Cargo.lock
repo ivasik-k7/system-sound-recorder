@@ -3243,7 +3243,7 @@ dependencies = [
 
 [[package]]
 name = "ssr-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -3254,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "ssr-desktop"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -3273,7 +3273,7 @@ dependencies = [
 
 [[package]]
 name = "ssr-session"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -3285,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "ssr-timeline"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -3295,7 +3295,7 @@ dependencies = [
 
 [[package]]
 name = "ssr-transcribe"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",

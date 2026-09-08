@@ -7,9 +7,9 @@
 // that folder.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { IconCheck, IconFolder, IconSave } from './Icons'
+import { IconCheck, IconFolder, IconSave, IconWarning } from './Icons'
 import { Switch } from './primitives'
-import { FORMATS, type TranscriptFormat } from '../lib/transcribe'
+import { FORMATS, transcribeApi, type LocationWarning, type TranscriptFormat } from '../lib/transcribe'
 import { isDesktop } from '../lib/api'
 import { useConversation } from '../state/conversation'
 
@@ -43,6 +43,7 @@ export function SaveDialog() {
   const [includeSpeakers, setIncludeSpeakers] = useState(true)
   const [includeNotes, setIncludeNotes] = useState(true)
   const [result, setResult] = useState<string[] | null>(null)
+  const [warnings, setWarnings] = useState<LocationWarning[]>([])
   const [busy, setBusy] = useState(false)
 
   const firstField = useRef<HTMLInputElement>(null)
@@ -73,6 +74,28 @@ export function SaveDialog() {
     const t = window.setTimeout(() => firstField.current?.select(), 30)
     return () => window.clearTimeout(t)
   }, [open, suggested, status.transcriptPath])
+
+  useEffect(() => {
+    if (!open || !directory.trim()) {
+      setWarnings([])
+      return
+    }
+    // Checked as the folder changes rather than on save, so the warning is
+    // there while the choice is still being made.
+    let cancelled = false
+    const handle = window.setTimeout(() => {
+      void transcribeApi
+        .checkLocation(directory)
+        .then((found) => {
+          if (!cancelled) setWarnings(found)
+        })
+        .catch(() => {})
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(handle)
+    }
+  }, [open, directory])
 
   useEffect(() => {
     if (!open) return
@@ -176,6 +199,16 @@ export function SaveDialog() {
                 </button>
               </div>
             </label>
+
+            {warnings.map((w) => (
+              <div className="notice notice--warn" key={w.summary}>
+                <IconWarning tone="warn" size="lg" />
+                <div>
+                  <strong>{w.summary}</strong>
+                  <p>{w.detail}</p>
+                </div>
+              </div>
+            ))}
 
             <div className="field">
               <span className="field__label">Formats</span>

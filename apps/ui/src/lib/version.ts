@@ -1,7 +1,7 @@
 // What this build calls itself.
 //
 // The same shape the engine reports and writes into a session manifest —
-// `v0.2.1-abc1234` — so a screenshot of the About box and a `session.json`
+// `v0.3.0-abc1234` — so a screenshot of the About box and a `session.json`
 // found later name the same build.
 //
 // The package manifests keep the bare number, because that is all npm, Cargo

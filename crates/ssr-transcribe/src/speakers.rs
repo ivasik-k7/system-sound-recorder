@@ -200,7 +200,10 @@ impl Diariser {
             // Without a usable measurement, attributing this to a particular
             // person would be invention. It belongs to the channel.
             return Speaker {
-                index: 1,
+                // Zero is the bucket for "could not tell", kept distinct from
+                // voice one so that naming a speaker in the interface does not
+                // silently rename everything unattributed as well.
+                index: 0,
                 label: self.channel.clone(),
                 inferred: false,
             };
@@ -237,14 +240,19 @@ impl Diariser {
 
         Speaker {
             index,
-            // Only worth qualifying once there is more than one voice; until
-            // then "Citrix" reads better than "Citrix, speaker 1".
-            label: if self.voices.len() > 1 {
-                format!("{}, speaker {}", self.channel, index)
-            } else {
-                self.channel.clone()
-            },
-            inferred: self.voices.len() > 1,
+            // Just the number. The channel used to be pasted on the front, so
+            // every line of a meeting read "Everything this machine plays,
+            // speaker 2: ..." — four thousand words of it in one transcript,
+            // and the channel is already recorded on the line and in the
+            // transcript header.
+            //
+            // The qualifier also used to depend on how many voices had been
+            // heard *so far*, which meant the first line of a conversation was
+            // labelled with the channel and every later line with a number.
+            // That one line then appeared in the speaker list as a person of
+            // its own. A voice is a voice from the first utterance.
+            label: format!("Speaker {index}"),
+            inferred: true,
         }
     }
 }
@@ -298,14 +306,28 @@ mod tests {
     }
 
     #[test]
-    fn a_single_voice_stays_one_speaker_named_after_the_channel() {
+    fn one_voice_is_labelled_the_same_way_from_its_very_first_utterance() {
+        // The label used to depend on how many voices had been heard so far,
+        // so the opening line of a conversation was named after the channel
+        // and everything after it was numbered. The opening line then showed
+        // up in the speaker list as a separate person.
         let mut d = Diariser::new("Citrix", true);
         for pitch in [110.0, 116.0, 108.0, 113.0] {
             let print = voice_print(&voice(pitch, 0.8, 0.2), RATE);
             let speaker = d.assign(&print);
-            assert_eq!(speaker.label, "Citrix");
+            assert_eq!(speaker.label, "Speaker 1");
+            assert_eq!(speaker.index, 1);
         }
         assert_eq!(d.voice_count(), 1);
+    }
+
+    #[test]
+    fn a_label_never_carries_the_channel_name_in_it() {
+        // Every line of a transcript is on some channel; repeating its name in
+        // front of the words is four thousand words of noise in a long meeting.
+        let mut d = Diariser::new("Everything this machine plays", true);
+        let low = voice_print(&voice(105.0, 1.0, 0.15), RATE);
+        assert!(!d.assign(&low).label.contains("machine plays"));
     }
 
     #[test]
@@ -319,7 +341,9 @@ mod tests {
         d.assign(&low);
 
         assert_eq!(d.voice_count(), 2, "voices were not separated");
-        assert!(d.assign(&high).label.contains("speaker"));
+        assert_eq!(d.assign(&high).label, "Speaker 2");
+        // And the same voice keeps the same label when it comes back.
+        assert_eq!(d.assign(&low).label, "Speaker 1");
     }
 
     #[test]

@@ -286,6 +286,14 @@ export function ConversationPanel() {
                   {status.backlog} behind
                 </span>
               )}
+              {status.repairedWords > 0 && (
+                <span
+                  className="badge"
+                  title="Words removed because the engine repeated itself instead of listening. They were never spoken."
+                >
+                  {status.repairedWords} looped words removed
+                </span>
+              )}
             </>
           ) : (
             <>{target ? `Ready to listen to ${targetLabel}` : 'No channel chosen'}</>
